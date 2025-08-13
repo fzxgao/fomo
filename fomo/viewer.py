@@ -6,8 +6,8 @@ import mrcfile
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 # Import features from other modules
-from fomo.utils.slices import SliceCache, SliceView, subsampled_histogram, fast_header_stats
-from fomo.utils.histogram import HistogramWidget
+from fomo.core.cache import SliceCache, SliceView, subsampled_histogram, fast_header_stats
+from fomo.widgets.histogram import HistogramWidget
 from fomo.features.picking import PickingModeHandler
 
 # ---------------- Utility ----------------

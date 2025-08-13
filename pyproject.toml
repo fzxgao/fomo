@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fomo-tomo"
+version = "0.1.0"
+description = "Fast MRC tomogram viewer with XY/XZ panels, histogram, and picking"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy>=1.23",
+  "mrcfile>=1.4",
+  "PyQt5>=5.15",
+]
+license = {text = "MIT"}
+authors = [{name="Your Name", email="you@example.com"}]
+keywords = ["tomography", "EM", "MRC", "visualization"]
+
+[project.scripts]
+fomo = "fomo.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fomo*"]

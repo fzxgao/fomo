@@ -6,7 +6,10 @@ import mrcfile
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 # Import features from other modules
-from fomo.core.cache import SliceCache, SliceView, subsampled_histogram, fast_header_stats
+from fomo.core.cache import SliceCache
+from fomo.core.sampling import subsampled_histogram
+from fomo.io.mrcio import fast_header_stats
+from fomo.widgets.slice_view import SliceView
 from fomo.widgets.histogram import HistogramWidget
 from fomo.features.picking import PickingModeHandler
 
@@ -66,6 +69,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.xz_visible = True
         self._built_scroll_conn = False
         self._xz_timer = None
+        self.crosshair_visible = False  # Add this line
 
         # Scroll debounce timer
         self._scroll_timer = QtCore.QTimer(self)
@@ -140,6 +144,7 @@ class TomoViewer(QtWidgets.QWidget):
         QtWidgets.QShortcut(QtGui.QKeySequence("Z"), self, self._toggle_xz)
         QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Up), self, lambda: self._step_z(4))
         QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Down), self, lambda: self._step_z(-4))
+        QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Escape), self, self._hide_crosshair)
 
         # --- Picking mode shortcuts ---
         QtWidgets.QShortcut(QtGui.QKeySequence("P"), self, self.picking_handler.enter)
@@ -250,7 +255,10 @@ class TomoViewer(QtWidgets.QWidget):
     def _refresh_views(self, delayed_xz=False):
         qimg_xy, _ = self._get_xy(self.z)
         self.view_xy.set_image(qimg_xy)
-        self.view_xy.set_crosshair(self.x, self.y)
+        if self.crosshair_visible:
+            self.view_xy.set_crosshair(self.x, self.y)
+        else:
+            self.view_xy.hide_crosshair()  # Use the new method
 
         if delayed_xz and self.xz_visible:
             self._schedule_xz_update()
@@ -265,7 +273,10 @@ class TomoViewer(QtWidgets.QWidget):
             return
         qimg_xz, _ = self._get_xz(self.y)
         self.view_xz.set_image(qimg_xz)
-        self.view_xz.set_crosshair(self.x, self.z)
+        if self.crosshair_visible:
+            self.view_xz.set_crosshair(self.x, self.z)
+        else:
+            self.view_xz.hide_crosshair()
         self._set_hist_quarter()
 
     def _schedule_xz_update(self, delay_ms=250):
@@ -294,15 +305,23 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Click interactions ----------
     def _clicked_xy(self, x, y):
+        self.crosshair_visible = True  # Show crosshair after first click
         self.x, self.y = x, y
         self._refresh_views(delayed_xz=self.xz_visible)
 
     def _clicked_xz(self, x, z):
         if not self.xz_visible:
             return
+        self.crosshair_visible = True  # Show crosshair after first click
         self.x, self.z = x, z
         self.scroll_z.setValue(self.z)
         self._refresh_views(delayed_xz=self.xz_visible)
+    
+    def _hide_crosshair(self):
+        self.crosshair_visible = False
+        self.view_xy.hide_crosshair()
+        self.view_xz.hide_crosshair()
+
 
     # ---------- Scrolling ----------
     def _step_z(self, step):
@@ -388,9 +407,14 @@ class TomoViewer(QtWidgets.QWidget):
     def _scroll_commit(self):
         qimg_xy, _ = self._get_xy(self.z)
         self.view_xy.set_image(qimg_xy)
-        self.view_xy.set_crosshair(self.x, self.y)
-        if self.xz_visible:
-            self.view_xz.set_crosshair(self.x, self.z)
+        if self.crosshair_visible:
+            self.view_xy.set_crosshair(self.x, self.y)
+            if self.xz_visible:
+                self.view_xz.set_crosshair(self.x, self.z)
+        else:
+            self.view_xy.hide_crosshair()
+            if self.xz_visible:
+                self.view_xz.hide_crosshair()
         self._update_status()
     # ---------- Picking Mode ----------
     def _toggle_picking_on(self):
@@ -398,8 +422,9 @@ class TomoViewer(QtWidgets.QWidget):
             print("[picking] Activating picking mode")
         self.picking_mode = True
         self.picked_points = []
-        self.prev_xz_visible = self.xz_visible
-        self.prev_hist_visible = TomoViewer.last_hist_visible
+        # Store previous visibility states
+        self.prev_xz_visible = self.top_split.isVisible()
+        self.prev_hist_visible = self.hist_widget.isVisible() if self.hist_widget else False
         # Hide panels for performance
         self.top_split.setVisible(False)
         if self.hist_widget:
@@ -414,87 +439,9 @@ class TomoViewer(QtWidgets.QWidget):
         self.picking_mode = False
         self.picked_points.clear()
         # Restore previous layout
-        self.xz_visible = self.prev_xz_visible
+        self.top_split.setVisible(self.prev_xz_visible)
+        if self.hist_widget:
+            self.hist_widget.setVisible(self.prev_hist_visible)
         TomoViewer.last_hist_visible = self.prev_hist_visible
-        self.top_split.setVisible(self.xz_visible)
-        if self.xz_visible and TomoViewer.last_hist_visible and self.hist_widget:
-            self.hist_widget.setVisible(True)
         self._set_cursor_mode(False)
         self._refresh_views(delayed_xz=self.xz_visible)
-
-    def _set_cursor_mode(self, picking):
-        if picking:
-            self.view_xy.setDragMode(QtWidgets.QGraphicsView.NoDrag)
-            self.view_xy.viewport().setCursor(QtCore.Qt.ArrowCursor)
-        else:
-            self.view_xy.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-            self.view_xy.viewport().unsetCursor()
-
-    def _picking_click(self, x, y):
-        if self._verbose:
-            print(f"[picking] Click at ({x},{y}) in Z={self.z}")
-        self.picked_points.append((x, y, self.z))
-        if len(self.picked_points) == 2:
-            if self._verbose:
-                print(f"[picking] Two points selected: {self.picked_points}")
-            # TODO: Call resampling function for custom plane
-            self._show_custom_plane()
-
-    def _show_custom_plane(self):
-        p1, p2 = self.picked_points
-        # For now, just placeholder debug output
-        if self._verbose:
-            print(f"[custom plane] Would resample plane using {p1} -> {p2}")
-        # Reset picking state for next selection
-        self.picked_points.clear()
-    def disable_file_switching(self, disable=True):
-        """Prevent or allow 1/2 key navigation between tomograms."""
-        self._file_switching_disabled = disable
-
-    def _prev_file(self):
-        if getattr(self, "_file_switching_disabled", False):
-            return
-        # existing prev file code...
-
-    def _next_file(self):
-        if getattr(self, "_file_switching_disabled", False):
-            return
-        # existing next file code...
-
-    # ---------- Main Entrypoint ----------
-def main():
-    parser = argparse.ArgumentParser(description="Fast MRC viewer (fomo)")
-    parser.add_argument("path", help="MRC file or folder")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Verbose tracing to stdout")
-    parser.add_argument("--scroll-base", type=int, default=4,
-                        help="Base slices per notch (default: 4)")
-    parser.add_argument("--scroll-threshold", type=float, default=2.0,
-                        help="Seconds between wheel events to count as fast (default: 2.0)")
-    parser.add_argument("--scroll-mult", type=float, default=0.01,
-                        help="Per-streak multiplier (default: 0.01)")
-    parser.add_argument("--scroll-max-streak", type=int, default=4,
-                        help="Max streak growth steps (default: 4)")
-    args = parser.parse_args()
-
-    verbose = args.verbose or os.environ.get("FOMO_VERBOSE", "") not in ("", "0", "false", "False")
-    path = os.path.abspath(args.path)
-    files = list_mrcs(path)
-    if not files:
-        sys.exit("No MRC files found.")
-
-    app = QtWidgets.QApplication(sys.argv)
-    w = TomoViewer(
-        path,
-        verbose=verbose,
-        scroll_base=args.scroll_base,
-        scroll_threshold=args.scroll_threshold,
-        scroll_mult=args.scroll_mult,
-        scroll_max_streak=args.scroll_max_streak,
-    )
-    w.resize(800, 850)
-    w.show()
-    sys.exit(app.exec_())
-
-if __name__ == "__main__":
-    main()

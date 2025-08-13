@@ -25,6 +25,8 @@ class SliceView(QtWidgets.QGraphicsView):
         pen.setCosmetic(True)
         self.hline = self.scene().addLine(0, 0, 1, 0, pen)
         self.vline = self.scene().addLine(0, 0, 0, 1, pen)
+        self.hline.setVisible(False)
+        self.vline.setVisible(False)
         self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.img_w = 1
@@ -46,7 +48,13 @@ class SliceView(QtWidgets.QGraphicsView):
     def set_crosshair(self, x, y):
         self.hline.setLine(0, y + 0.5, self.img_w, y + 0.5)
         self.vline.setLine(x + 0.5, 0, x + 0.5, self.img_h)
-        
+        self.hline.setVisible(True)
+        self.vline.setVisible(True)
+
+    def hide_crosshair(self):
+        self.hline.setVisible(False)
+        self.vline.setVisible(False)
+
     def set_cursor_mode(self, picking):
         """Switch between hand-drag and normal arrow cursor for picking mode."""
         if picking:

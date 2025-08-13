@@ -147,9 +147,24 @@ class TomoViewer(QtWidgets.QWidget):
         QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Escape), self, self._hide_crosshair)
 
         # --- Picking mode shortcuts ---
-        QtWidgets.QShortcut(QtGui.QKeySequence("P"), self, self.picking_handler.enter)
-        QtWidgets.QShortcut(QtGui.QKeySequence("Shift+P"), self, self.picking_handler.exit)
-        QtWidgets.QShortcut(QtGui.QKeySequence("X"), self, self.picking_handler.add_point_under_cursor)
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence("P"),
+            self,
+            self.picking_handler.enter,
+            context=QtCore.Qt.ApplicationShortcut,
+        )
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence("Shift+P"),
+            self,
+            self.picking_handler.exit,
+            context=QtCore.Qt.ApplicationShortcut,
+        )
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence("X"),
+            self,
+            self.picking_handler.add_point_under_cursor,
+            context=QtCore.Qt.ApplicationShortcut,
+        )
 
     # ---------- File loading ----------
     def load_file(self, idx):

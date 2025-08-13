@@ -112,11 +112,3 @@ class SliceView(QtWidgets.QGraphicsView):
             y = int(np.clip(round(pos.y()), 0, self.img_h - 1))
             self.clicked.emit(x, y)
         super().mousePressEvent(ev)
-
-    def set_cursor_mode(self, picking):
-        if picking:
-            self.setDragMode(QtWidgets.QGraphicsView.NoDrag)
-            self.viewport().setCursor(QtCore.Qt.ArrowCursor)
-        else:
-            self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-            self.viewport().unsetCursor()

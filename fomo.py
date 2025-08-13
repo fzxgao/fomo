@@ -7,19 +7,37 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
+    """Return sorted list of MRC-like files for *path*.
+
+    The original implementation only matched lowercase extensions, which meant
+    files such as ``FOO.MRC`` were silently ignored on case-sensitive
+    filesystems.  Many tomography datasets use upper-case extensions, so the
+    search now performs a case-insensitive check by scanning the directory and
+    filtering by the lower-cased filename.
+    """
+
+    path = os.path.abspath(path)
+
+    def _scan(directory):
+        files = []
+        try:
+            for entry in os.scandir(directory):
+                if entry.is_file():
+                    name = entry.name.lower()
+                    if name.endswith((".mrc", ".rec", ".mrcs")):
+                        files.append(os.path.join(directory, entry.name))
+        except FileNotFoundError:
+            return []
+        return sorted(files)
+
     if os.path.isdir(path):
-        files = sorted(glob.glob(os.path.join(path, "*.mrc")) +
-                       glob.glob(os.path.join(path, "*.rec")) +
-                       glob.glob(os.path.join(path, "*.mrcs")))
-        return files
+        return _scan(path)
     else:
-        d = os.path.dirname(path) or "."
-        files = sorted(glob.glob(os.path.join(d, "*.mrc")) +
-                       glob.glob(os.path.join(d, "*.rec")) +
-                       glob.glob(os.path.join(d, "*.mrcs")))
-        if path not in files and os.path.exists(path):
+        directory = os.path.dirname(path) or "."
+        files = _scan(directory)
+        if os.path.exists(path) and path not in files:
             files.append(path)
-            files = sorted(files)
+            files.sort()
         return files
 
 def subsampled_histogram(memmap_arr, bins=256, max_voxels=2_000_000):

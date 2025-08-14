@@ -55,7 +55,7 @@ class PickingModeHandler:
             side_w = int(self._window_width * 0.25)
             self.viewer.picking_panel.setFixedWidth(side_w)
             self.viewer.picking_panel.setVisible(True)
-            self.viewer.resize(self._window_width + side_w, self.viewer.height())
+            self.viewer.resize(self._window_width + side_w*3, self.viewer.height())
         except Exception:
             pass
 
@@ -244,7 +244,7 @@ class PickingModeHandler:
         # Sampling grid: width fixed at 40 px along 'a', height along 'b'
         width = 40
         half_w = width // 2
-        
+
         # Store plane parameters for coordinate mapping
         self._plane_origin = p1.copy()
         self._plane_a = a

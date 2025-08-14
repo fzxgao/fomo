@@ -14,6 +14,7 @@ from fomo.core.sampling import subsampled_histogram
 from fomo.io.mrcio import fast_header_stats
 from fomo.widgets.slice_view import SliceView
 from fomo.widgets.histogram import HistogramWidget
+from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.features.picking import PickingModeHandler
 
 # ---------------- Utility ----------------
@@ -132,7 +133,14 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- UI builder ----------
     def _build_ui(self):
-        v = QtWidgets.QVBoxLayout(self)
+        h = QtWidgets.QHBoxLayout(self)
+        central = QtWidgets.QWidget()
+        v = QtWidgets.QVBoxLayout(central)
+        h.addWidget(central, 1)
+        self.picking_panel = PickingSidePanel()
+        self.picking_panel.setVisible(False)
+        h.addWidget(self.picking_panel)
+
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         v.addWidget(self.splitter, 1)
 
@@ -166,6 +174,7 @@ class TomoViewer(QtWidgets.QWidget):
         
         self.lbl = StatusLabel(lambda: self.files[self.idx])
         v.addWidget(self.lbl)
+        self.picking_panel.model_list.modelActivated.connect(self.activate_model)
 
         self.splitter.splitterMoved.connect(lambda *_: self._fit_views_only())
         self.top_split.splitterMoved.connect(lambda *_: self._fit_views_only())
@@ -466,6 +475,12 @@ class TomoViewer(QtWidgets.QWidget):
         self.view_xz.hide_crosshair()
         if hasattr(self, "clear_marker_xy"):
             self.clear_marker_xy()
+
+    # ---------- Models panel ----------
+    def activate_model(self, name: str):
+        """Placeholder slot for activating a model from the models list."""
+        if self._verbose:
+            print(f"[models] activated {name}")
 
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):

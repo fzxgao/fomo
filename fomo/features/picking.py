@@ -34,6 +34,10 @@ class PickingModeHandler:
             self.viewer.hist_widget.setVisible(False)
         self.viewer.top_split.setVisible(False)
         self.viewer.xz_visible = False
+        try:
+            type(self.viewer).last_hist_visible = False
+        except Exception:
+            pass
 
         # Hide any existing crosshair when picking
         if hasattr(self.viewer, "_hide_crosshair"):
@@ -63,6 +67,10 @@ class PickingModeHandler:
             self.viewer.top_split.setVisible(xz_vis)
             if hist_vis and self.viewer.hist_widget:
                 self.viewer.hist_widget.setVisible(True)
+            try:
+                type(self.viewer).last_hist_visible = hist_vis
+            except Exception:
+                pass
         self._saved_layout = None
 
         # Cursor back to hand-drag

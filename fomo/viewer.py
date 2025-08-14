@@ -485,33 +485,3 @@ class TomoViewer(QtWidgets.QWidget):
                 self.view_xz.hide_crosshair()
         self._update_status()
         self._update_xy_marker_visibility()
-
-    # ---------- Picking Mode ----------
-    def _toggle_picking_on(self):
-        if self._verbose:
-            print("[picking] Activating picking mode")
-        self.picking_mode = True
-        self.picked_points = []
-        # Store previous visibility states
-        self.prev_xz_visible = self.top_split.isVisible()
-        self.prev_hist_visible = self.hist_widget.isVisible() if self.hist_widget else False
-        # Hide panels for performance
-        self.top_split.setVisible(False)
-        if self.hist_widget:
-            self.hist_widget.setVisible(False)
-        TomoViewer.last_hist_visible = False
-        self._set_cursor_mode(True)
-        self.lbl.setText(self.lbl.text() + "   PICKING MODE ACTIVATED")
-
-    def _toggle_picking_off(self):
-        if self._verbose:
-            print("[picking] Deactivating picking mode")
-        self.picking_mode = False
-        self.picked_points.clear()
-        # Restore previous layout
-        self.top_split.setVisible(self.prev_xz_visible)
-        if self.hist_widget:
-            self.hist_widget.setVisible(self.prev_hist_visible)
-        TomoViewer.last_hist_visible = self.prev_hist_visible
-        self._set_cursor_mode(False)
-        self._refresh_views(delayed_xz=self.xz_visible)

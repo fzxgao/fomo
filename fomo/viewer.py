@@ -316,7 +316,10 @@ class TomoViewer(QtWidgets.QWidget):
             self.view_xz.fit_height()
 
     def _update_status(self):
-        self.lbl.setText(f"{os.path.basename(self.files[self.idx])}  X:{self.x} Y:{self.y} Z:{self.z}")
+        status = f"{os.path.basename(self.files[self.idx])}  X:{self.x} Y:{self.y} Z:{self.z}"
+        if self.picking_handler.is_active():
+            status += " | PICKING MODE ACTIVATED"
+        self.lbl.setText(status)
 
     # ---------- Click interactions ----------
     def _clicked_xy(self, x, y):

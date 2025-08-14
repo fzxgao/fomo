@@ -69,7 +69,10 @@ class TomoViewer(QtWidgets.QWidget):
         self.xz_visible = True
         self._built_scroll_conn = False
         self._xz_timer = None
-        self.crosshair_visible = False  # Add this line
+        self.crosshair_visible = False 
+        # Track small cross markers in the XY view (for picking etc.)
+        self._xy_marker_items = []
+        self._xy_marker_z = None
 
         # Scroll debounce timer
         self._scroll_timer = QtCore.QTimer(self)
@@ -173,6 +176,7 @@ class TomoViewer(QtWidgets.QWidget):
     # ---------- File loading ----------
     def load_file(self, idx):
         self._cancel_xz_timer()
+        self.clear_marker_xy()
 
         mrc = self.mrc_handles[idx]
         data = mrc.data  # memmap
@@ -286,6 +290,7 @@ class TomoViewer(QtWidgets.QWidget):
 
         self._fit_views_only()
         self._update_status()
+        self._update_xy_marker_visibility()
 
     def _update_xz_immediate(self):
         if not self.xz_visible:
@@ -327,7 +332,8 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Click interactions ----------
     def _clicked_xy(self, x, y):
-        self.crosshair_visible = True  # Show crosshair after first click
+        if not self.picking_handler.is_active():
+            self.crosshair_visible = True  # Show crosshair after first click
         self.x, self.y = x, y
         self._refresh_views(delayed_xz=self.xz_visible)
         if self.picking_handler.is_active():
@@ -336,7 +342,8 @@ class TomoViewer(QtWidgets.QWidget):
     def _clicked_xz(self, x, z):
         if not self.xz_visible:
             return
-        self.crosshair_visible = True  # Show crosshair after first click
+        if not self.picking_handler.is_active():
+            self.crosshair_visible = True  # Show crosshair after first click
         self.x, self.z = x, z
         self.scroll_z.setValue(self.z)
         self._refresh_views(delayed_xz=self.xz_visible)
@@ -346,6 +353,36 @@ class TomoViewer(QtWidgets.QWidget):
         self.view_xy.hide_crosshair()
         self.view_xz.hide_crosshair()
 
+    # ---------- XY marker drawing ----------
+    def clear_marker_xy(self):
+        scene = self.view_xy.scene()
+        for item in self._xy_marker_items:
+            try:
+                scene.removeItem(item)
+            except Exception:
+                pass
+        self._xy_marker_items.clear()
+        self._xy_marker_z = None
+
+    def _update_xy_marker_visibility(self):
+        visible = bool(self._xy_marker_items) and self._xy_marker_z == self.z
+        for item in self._xy_marker_items:
+            item.setVisible(visible)
+
+    def draw_marker_xy(self, x, y, color):
+        """Draw a small cross marker at (x, y) in the XY view."""
+        self.clear_marker_xy()
+        scene = self.view_xy.scene()
+
+        pen = QtGui.QPen(color)
+        pen.setWidth(2)
+        pen.setCosmetic(True)
+        half = 3  # ~6 px total length
+        h = scene.addLine(x - half, y, x + half, y, pen)
+        v = scene.addLine(x, y - half, x, y + half, pen)
+        self._xy_marker_items.extend([h, v])
+        self._xy_marker_z = self.z
+        self._update_xy_marker_visibility()
 
     # ---------- Scrolling ----------
     def _step_z(self, step):
@@ -355,6 +392,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.scroll_z.blockSignals(False)
         self._scroll_timer.stop()
         self._scroll_timer.start(10)
+        self._update_xy_marker_visibility()
 
     def _set_z(self, val):
         self.z = val
@@ -446,6 +484,8 @@ class TomoViewer(QtWidgets.QWidget):
             if self.xz_visible:
                 self.view_xz.hide_crosshair()
         self._update_status()
+        self._update_xy_marker_visibility()
+
     # ---------- Picking Mode ----------
     def _toggle_picking_on(self):
         if self._verbose:

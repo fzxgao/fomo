@@ -35,6 +35,10 @@ class PickingModeHandler:
         self.viewer.top_split.setVisible(False)
         self.viewer.xz_visible = False
 
+        # Hide any existing crosshair when picking
+        if hasattr(self.viewer, "_hide_crosshair"):
+            self.viewer._hide_crosshair()
+
         # Cursor: arrow + no-drag in picking mode
         self._set_cursor(True)
 

@@ -87,6 +87,13 @@ class PickingModeHandler:
         # Clean up status tag
         self._remove_status_tag(" | PICKING MODE ACTIVATED")
 
+        # Remove any marker that might remain from picking
+        if hasattr(self.viewer, "clear_marker_xy"):
+            try:
+                self.viewer.clear_marker_xy()
+            except Exception:
+                pass
+
         # Ensure normal view is restored/redrawn
         if hasattr(self.viewer, "_refresh_views"):
             self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)

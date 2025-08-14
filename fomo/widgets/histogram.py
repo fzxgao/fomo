@@ -13,6 +13,12 @@ class HistogramWidget(QtWidgets.QWidget):
         self.setMinimumWidth(80)
         self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
 
+    def set_data(self, hist, edges, init_min, init_max):
+        self.hist, self.edges = hist, edges
+        self.min_val, self.max_val = init_min, init_max
+        self._clamp_thresholds()
+        self.update()
+
     def _clamp_thresholds(self):
         if len(self.edges) == 0:
             return

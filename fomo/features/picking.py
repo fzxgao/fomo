@@ -16,6 +16,11 @@ class PickingModeHandler:
         # Store last confirmed pair defining the custom plane
         self._line = None  # (p1, p2) as float32 arrays
         self._base_z = 0.0  # viewer.z when _line was set
+        # Parameters describing the current custom plane
+        self._plane_origin = None
+        self._plane_a = None
+        self._plane_v = None
+        self._plane_half_w = 0
 
     # -------- Public API --------
     def is_active(self):
@@ -64,6 +69,11 @@ class PickingModeHandler:
         self._active = False
         self._points.clear()
         self._line = None
+        self._plane_origin = None
+        self._plane_a = None
+        self._plane_v = None
+        self._plane_half_w = 0
+
 
         # Restore layout
         if self._saved_layout is not None:
@@ -102,11 +112,13 @@ class PickingModeHandler:
         """Add a pick at current cursor position on the XY view."""
         if not self._active:
             return
-        pos = self.viewer.view_xy.mapToScene(self.viewer.view_xy.mapFromGlobal(QtGui.QCursor.pos()))
-        x = int(np.clip(round(pos.x()), 0, self.viewer.X - 1))
-        y = int(np.clip(round(pos.y()), 0, self.viewer.Y - 1))
-        z = int(self.viewer.z)
-        self._add_point((x, y, z))
+        pos = self.viewer.view_xy.mapToScene(
+            self.viewer.view_xy.mapFromGlobal(QtGui.QCursor.pos())
+        )
+        x = int(np.clip(round(pos.x()), 0, self.viewer.view_xy.img_w - 1))
+        y = int(np.clip(round(pos.y()), 0, self.viewer.view_xy.img_h - 1))
+        xw, yw, zw = self.map_xy_to_volume(x, y)
+        self._add_point((xw, yw, zw))
 
     def _add_point(self, p):
         """Internal: add a point and act when we have two."""
@@ -156,7 +168,17 @@ class PickingModeHandler:
     def has_plane(self):
         """Return True if a custom plane is currently displayed."""
         return self._line is not None
-
+    def map_xy_to_volume(self, x, y):
+        """Map XY view pixel coordinates to original volume coordinates."""
+        if self.has_plane() and self._plane_origin is not None:
+            world = (
+                self._plane_origin
+                + (x - self._plane_half_w) * self._plane_a
+                + y * self._plane_v
+            )
+            return tuple(int(round(c)) for c in world)
+        else:
+            return int(x), int(y), int(self.viewer.z)
     def _show_custom_plane(self, p1, p2):
         """Store picked points and render their orthogonal plane."""
         p1 = np.array(p1, dtype=np.float32)
@@ -201,7 +223,12 @@ class PickingModeHandler:
         # Sampling grid: width fixed at 40 px along 'a', height along 'b'
         width = 40
         half_w = width // 2
-
+        
+        # Store plane parameters for coordinate mapping
+        self._plane_origin = p1.copy()
+        self._plane_a = a
+        self._plane_v = v
+        self._plane_half_w = half_w
         # Height — pick something meaningful: distance between z's OR full span between p1 and p2
         # We’ll use Euclidean distance projected onto v for stability:
         height = int(round(nv)) or 1

@@ -421,13 +421,19 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Click interactions ----------
     def _clicked_xy(self, x, y):
+        wx, wy, wz = self.picking_handler.map_xy_to_volume(x, y)
+        if self._verbose:
+            print(f"[click.xy] x={wx} y={wy} z={wz}")
         if self.picking_handler.is_active():
-            self.x, self.y = x, y
-            self.picking_handler.add_point_under_cursor()
+            self.x, self.y, self.z = wx, wy, wz
+            self.scroll_z.setValue(self.z)
+            # Use internal method to avoid recomputing coords
+            self.picking_handler._add_point((wx, wy, wz))
             self._update_status()
         else:
             self.crosshair_visible = True  # Show crosshair after first click
-            self.x, self.y = x, y
+            self.x, self.y, self.z = wx, wy, wz
+            self.scroll_z.setValue(self.z)
             self._refresh_views(delayed_xz=self.xz_visible)
 
     def _clicked_xz(self, x, z):
@@ -436,6 +442,8 @@ class TomoViewer(QtWidgets.QWidget):
         if not self.picking_handler.is_active():
             self.crosshair_visible = True  # Show crosshair after first click
         self.x, self.z = x, z
+        if self._verbose:
+            print(f"[click.xz] x={self.x} y={self.y} z={self.z}")
         self.scroll_z.setValue(self.z)
         self._refresh_views(delayed_xz=self.xz_visible)
     
@@ -544,12 +552,17 @@ class TomoViewer(QtWidgets.QWidget):
         if self.idx > 0:
             self.idx -= 1
             self.load_file(self.idx)
+        else:
+            self._update_status()
+            self.lbl.setText(self.lbl.text() + " | BEGINNING OF LIST")
 
     def _next_file(self):
         if self.idx < len(self.files) - 1:
             self.idx += 1
             self.load_file(self.idx)
-
+        else:
+            self._update_status()
+            self.lbl.setText(self.lbl.text() + " | END OF LIST")
 
     def disable_file_switching(self, disable: bool):
         """Enable or disable shortcuts that switch between tomograms."""

@@ -38,6 +38,19 @@ def list_mrcs(path):
             files = sorted(files)
         return files
 
+# ---------------- Status Label ----------------
+class StatusLabel(QtWidgets.QLabel):
+    """QLabel that copies the current file path to the clipboard on double click."""
+
+    def __init__(self, path_fn, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._path_fn = path_fn
+
+    def mouseDoubleClickEvent(self, event):  # pragma: no cover - GUI interaction
+        QtWidgets.QApplication.clipboard().setText(os.path.abspath(self._path_fn()))
+        super().mouseDoubleClickEvent(event)
+
+
 # ---------------- Main Viewer ----------------
 class TomoViewer(QtWidgets.QWidget):
     """
@@ -151,7 +164,7 @@ class TomoViewer(QtWidgets.QWidget):
             view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
             view.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         
-        self.lbl = QtWidgets.QLabel()
+        self.lbl = StatusLabel(lambda: self.files[self.idx])
         v.addWidget(self.lbl)
 
         self.splitter.splitterMoved.connect(lambda *_: self._fit_views_only())

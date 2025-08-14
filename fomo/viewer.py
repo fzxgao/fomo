@@ -539,7 +539,13 @@ class TomoViewer(QtWidgets.QWidget):
 
     def _set_z(self, val):
         self.z = val
-        self._refresh_views(delayed_xz=self.xz_visible)
+        if self.picking_handler.is_active() and self.picking_handler.has_plane():
+            if not self.picking_handler.is_plane_editing():
+                self.picking_handler.update_plane_for_z(self.z)
+            self._update_status()
+            self._update_xy_marker_visibility()
+        else:
+            self._refresh_views(delayed_xz=self.xz_visible)
 
     # ---------- Contrast ----------
     def _set_contrast(self, minv, maxv):

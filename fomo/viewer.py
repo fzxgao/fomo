@@ -138,13 +138,23 @@ class TomoViewer(QtWidgets.QWidget):
         self.view_xz.wheel_delta.connect(self._step_z)
 
         # Shortcuts
-        QtWidgets.QShortcut(QtGui.QKeySequence("1"), self, self._prev_file)
-        QtWidgets.QShortcut(QtGui.QKeySequence("2"), self, self._next_file)
+        self._sc_prev = QtWidgets.QShortcut(
+            QtGui.QKeySequence("1"), self, self._prev_file
+        )
+        self._sc_next = QtWidgets.QShortcut(
+            QtGui.QKeySequence("2"), self, self._next_file
+        )
         QtWidgets.QShortcut(QtGui.QKeySequence("H"), self, self._toggle_hist)
         QtWidgets.QShortcut(QtGui.QKeySequence("Z"), self, self._toggle_xz)
-        QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Up), self, lambda: self._step_z(4))
-        QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Down), self, lambda: self._step_z(-4))
-        QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Escape), self, self._hide_crosshair)
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Up), self, lambda: self._step_z(4)
+        )
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Down), self, lambda: self._step_z(-4)
+        )
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Escape), self, self._hide_crosshair
+        )
 
         # --- Picking mode shortcuts ---
         QtWidgets.QShortcut(
@@ -157,12 +167,6 @@ class TomoViewer(QtWidgets.QWidget):
             QtGui.QKeySequence("Shift+P"),
             self,
             self.picking_handler.exit,
-            context=QtCore.Qt.ApplicationShortcut,
-        )
-        QtWidgets.QShortcut(
-            QtGui.QKeySequence("X"),
-            self,
-            self.picking_handler.add_point_under_cursor,
             context=QtCore.Qt.ApplicationShortcut,
         )
 
@@ -326,6 +330,8 @@ class TomoViewer(QtWidgets.QWidget):
         self.crosshair_visible = True  # Show crosshair after first click
         self.x, self.y = x, y
         self._refresh_views(delayed_xz=self.xz_visible)
+        if self.picking_handler.is_active():
+            self.picking_handler.add_point_under_cursor()
 
     def _clicked_xz(self, x, z):
         if not self.xz_visible:
@@ -420,6 +426,12 @@ class TomoViewer(QtWidgets.QWidget):
         if self.idx < len(self.files) - 1:
             self.idx += 1
             self.load_file(self.idx)
+
+
+    def disable_file_switching(self, disable: bool):
+        """Enable or disable shortcuts that switch between tomograms."""
+        self._sc_prev.setEnabled(not disable)
+        self._sc_next.setEnabled(not disable)
 
     # ---------- Scroll commit ----------
     def _scroll_commit(self):

@@ -38,7 +38,7 @@ class PickingModeHandler:
         # Cursor: arrow + no-drag in picking mode
         self._set_cursor(True)
 
-        # Optional: if viewer supports disabling file switching
+        # Disable file switching
         if hasattr(self.viewer, "disable_file_switching"):
             self.viewer.disable_file_switching(True)
 

@@ -21,6 +21,7 @@ class PickingModeHandler:
         self._plane_a = None
         self._plane_v = None
         self._plane_half_w = 0
+        self._window_width = None
 
     # -------- Public API --------
     def is_active(self):
@@ -45,6 +46,16 @@ class PickingModeHandler:
         self.viewer.xz_visible = False
         try:
             type(self.viewer).last_hist_visible = False
+        except Exception:
+            pass
+
+        # Show side panel and expand window width by 25%
+        try:
+            self._window_width = self.viewer.width()
+            side_w = int(self._window_width * 0.25)
+            self.viewer.picking_panel.setFixedWidth(side_w)
+            self.viewer.picking_panel.setVisible(True)
+            self.viewer.resize(self._window_width + side_w, self.viewer.height())
         except Exception:
             pass
 
@@ -107,6 +118,16 @@ class PickingModeHandler:
         # Ensure normal view is restored/redrawn
         if hasattr(self.viewer, "_refresh_views"):
             self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)
+
+        # Hide side panel and restore window width
+        try:
+            if self._window_width is not None:
+                self.viewer.picking_panel.setVisible(False)
+                self.viewer.picking_panel.setFixedWidth(0)
+                self.viewer.resize(self._window_width, self.viewer.height())
+        except Exception:
+            pass
+        self._window_width = None
 
     def add_point_under_cursor(self):
         """Add a pick at current cursor position on the XY view."""

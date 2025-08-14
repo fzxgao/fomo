@@ -216,7 +216,18 @@ class TomoViewer(QtWidgets.QWidget):
             self.picking_handler.exit,
             context=QtCore.Qt.ApplicationShortcut,
         )
-
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Return),
+            self,
+            self.picking_handler.finish_plane,
+            context=QtCore.Qt.ApplicationShortcut,
+        )
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Enter),
+            self,
+            self.picking_handler.finish_plane,
+            context=QtCore.Qt.ApplicationShortcut,
+        )
     # ---------- Metadata preload ----------
     def _compute_metadata(self, idx, mrc):
         data = mrc.data
@@ -449,8 +460,11 @@ class TomoViewer(QtWidgets.QWidget):
         if self.picking_handler.is_active():
             self.x, self.y, self.z = wx, wy, wz
             self.scroll_z.setValue(self.z)
-            # Use internal method to avoid recomputing coords
-            self.picking_handler._add_point((wx, wy, wz))
+            if self.picking_handler.is_plane_editing():
+                self.picking_handler.add_plane_marker((x, y), (wx, wy, wz))
+            else:
+                # Use internal method to avoid recomputing coords
+                self.picking_handler._add_point((wx, wy, wz))
             self._update_status()
         else:
             self.crosshair_visible = True  # Show crosshair after first click

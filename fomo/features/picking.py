@@ -22,6 +22,10 @@ class PickingModeHandler:
         self._plane_v = None
         self._plane_half_w = 0
         self._window_width = None
+        # Plane editing state
+        self._plane_editing = False
+        self._plane_marker_items = []
+        self._plane_point_pixels = []
 
     # -------- Public API --------
     def is_active(self):
@@ -79,11 +83,7 @@ class PickingModeHandler:
             return
         self._active = False
         self._points.clear()
-        self._line = None
-        self._plane_origin = None
-        self._plane_a = None
-        self._plane_v = None
-        self._plane_half_w = 0
+        self.finish_plane()
 
 
         # Restore layout
@@ -207,6 +207,8 @@ class PickingModeHandler:
         self._line = (p1.copy(), p2.copy())
         self._base_z = float(self.viewer.z)
         self._render_plane(p1, p2)
+        self._plane_editing = True
+        self._clear_plane_annotations()
 
     def update_plane_for_z(self, z):
         """Rebuild the custom plane translated along the original Z axis."""
@@ -272,6 +274,52 @@ class PickingModeHandler:
         self.viewer.view_xy.set_image(qimg)
         self.viewer.view_xy.dynamic_fit = True
         self.viewer.view_xy.fit_height()
+    # ----- Plane annotation helpers -----
+    def is_plane_editing(self):
+        return self._plane_editing
+
+    def _clear_plane_annotations(self):
+        scene = self.viewer.view_xy.scene()
+        for item in self._plane_marker_items:
+            try:
+                scene.removeItem(item)
+            except Exception:
+                pass
+        self._plane_marker_items.clear()
+        self._plane_point_pixels.clear()
+
+    def add_plane_marker(self, view_pos, world_pos):
+        if not self._plane_editing:
+            return
+        scene = self.viewer.view_xy.scene()
+        x, y = view_pos
+        pen = QtGui.QPen(QtGui.QColor(0, 0, 255))
+        pen.setWidth(2)
+        pen.setCosmetic(True)
+        half = 3
+        h = scene.addLine(x - half, y, x + half, y, pen)
+        v = scene.addLine(x, y - half, x, y + half, pen)
+        self._plane_marker_items.extend([h, v])
+        if self._plane_point_pixels:
+            px, py = self._plane_point_pixels[-1]
+            line = scene.addLine(px, py, x, y, pen)
+            self._plane_marker_items.append(line)
+        self._plane_point_pixels.append((x, y))
+        wx, wy, wz = world_pos
+        print(f"X={int(round(wx))} Y={int(round(wy))} Z={int(round(wz))}")
+
+    def finish_plane(self):
+        self._clear_plane_annotations()
+        self._line = None
+        self._plane_origin = None
+        self._plane_a = None
+        self._plane_v = None
+        self._plane_half_w = 0
+        self._plane_editing = False
+        try:
+            self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)
+        except Exception:
+            pass
 
     @staticmethod
     def _trilinear(vol, coords):

@@ -13,6 +13,9 @@ class PickingModeHandler:
         self._active = False
         self._points = []  # [(x,y,z), (x,y,z)]
         self._saved_layout = None  # (xz_visible, hist_visible)
+        # Store last confirmed pair defining the custom plane
+        self._line = None  # (p1, p2) as float32 arrays
+        self._base_z = 0.0  # viewer.z when _line was set
 
     # -------- Public API --------
     def is_active(self):
@@ -24,6 +27,7 @@ class PickingModeHandler:
             return
         self._active = True
         self._points.clear()
+        self._line = None
 
         # Save and hide layout components for performance
         xz_vis = getattr(self.viewer, "xz_visible", True)
@@ -59,6 +63,7 @@ class PickingModeHandler:
             return
         self._active = False
         self._points.clear()
+        self._line = None
 
         # Restore layout
         if self._saved_layout is not None:
@@ -141,17 +146,32 @@ class PickingModeHandler:
             pass
 
     # -------- Custom plane rendering --------
+    def has_plane(self):
+        """Return True if a custom plane is currently displayed."""
+        return self._line is not None
+
     def _show_custom_plane(self, p1, p2):
-        """
-        Resample and render a custom plane in the XY view using a plane
-        defined by two picked points. Keeps it lightweight (NumPy only).
-        """
+        """Store picked points and render their orthogonal plane."""
+        p1 = np.array(p1, dtype=np.float32)
+        p2 = np.array(p2, dtype=np.float32)
+        self._line = (p1.copy(), p2.copy())
+        self._base_z = float(self.viewer.z)
+        self._render_plane(p1, p2)
+
+    def update_plane_for_z(self, z):
+        """Rebuild the custom plane translated along the original Z axis."""
+        if not self.has_plane():
+            return
+        offset = float(z) - self._base_z
+        p1, p2 = self._line
+        shift = np.array([0.0, 0.0, offset], dtype=np.float32)
+        self._render_plane(p1 + shift, p2 + shift)
+
+    def _render_plane(self, p1, p2):
+        """Resample and render a custom plane in the XY view."""
         vol = self.viewer.data  # shape (Z, Y, X)
         Z, Y, X = vol.shape
 
-        # Basis from p1->p2
-        p1 = np.array(p1, dtype=np.float32)
-        p2 = np.array(p2, dtype=np.float32)
         v = p2 - p1
         nv = np.linalg.norm(v)
         if nv < 1e-6:
@@ -159,7 +179,6 @@ class PickingModeHandler:
         v = v / nv  # "new Z" axis for the plane direction
 
         # Build orthonormal frame (v, a, b) where a,b span the plane
-        # Start with a provisional axis not colinear with v
         up = np.array([0, 0, 1], dtype=np.float32)
         if abs(np.dot(v, up)) > 0.9:
             up = np.array([0, 1, 0], dtype=np.float32)

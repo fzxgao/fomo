@@ -473,6 +473,12 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Scroll commit ----------
     def _scroll_commit(self):
+        if self.picking_handler.is_active() and self.picking_handler.has_plane():
+            self.picking_handler.update_plane_for_z(self.z)
+            self._update_status()
+            self._update_xy_marker_visibility()
+            return
+
         qimg_xy, _ = self._get_xy(self.z)
         self.view_xy.set_image(qimg_xy)
         if self.crosshair_visible:

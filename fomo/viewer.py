@@ -100,6 +100,7 @@ class TomoViewer(QtWidgets.QWidget):
         # Track small cross markers in the XY view (for picking etc.)
         self._xy_marker_items = []
         self._xy_marker_z = None
+        self._skip_plane_update = False
 
         # Scroll debounce timer
         self._scroll_timer = QtCore.QTimer(self)
@@ -459,6 +460,8 @@ class TomoViewer(QtWidgets.QWidget):
             print(f"[click.xy] x={wx} y={wy} z={wz}")
         if self.picking_handler.is_active():
             self.x, self.y, self.z = wx, wy, wz
+            if self.picking_handler.is_plane_editing():
+                self._skip_plane_update = True
             self.scroll_z.setValue(self.z)
             if self.picking_handler.is_plane_editing():
                 self.picking_handler.add_plane_marker((x, y), (wx, wy, wz))
@@ -529,6 +532,9 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Scrolling ----------
     def _step_z(self, step):
+        if self.picking_handler.is_active() and self.picking_handler.has_plane():
+            scale = max(1, int(round(abs(step) * 0.1)))
+            step = int(math.copysign(scale, step))
         self.z = int(np.clip(self.z + step, 0, self.Z - 1))
         self.scroll_z.blockSignals(True)
         self.scroll_z.setValue(self.z)
@@ -541,6 +547,8 @@ class TomoViewer(QtWidgets.QWidget):
         self.z = val
         if self.picking_handler.is_active() and self.picking_handler.has_plane():
             if not self.picking_handler.is_plane_editing():
+                self.picking_handler.update_plane_for_z(self.z)
+            elif not self._skip_plane_update:
                 self.picking_handler.update_plane_for_z(self.z)
             self._update_status()
             self._update_xy_marker_visibility()
@@ -620,9 +628,11 @@ class TomoViewer(QtWidgets.QWidget):
     # ---------- Scroll commit ----------
     def _scroll_commit(self):
         if self.picking_handler.is_active() and self.picking_handler.has_plane():
-            self.picking_handler.update_plane_for_z(self.z)
+            if not self.picking_handler.is_plane_editing() or not self._skip_plane_update:
+                self.picking_handler.update_plane_for_z(self.z)
             self._update_status()
             self._update_xy_marker_visibility()
+            self._skip_plane_update = False
             return
 
         qimg_xy, _ = self._get_xy(self.z)

@@ -305,10 +305,6 @@ class PickingModeHandler:
         if not self._plane_points_world or self._plane_origin is None:
             return
 
-        pen = QtGui.QPen(QtGui.QColor(0, 0, 255))
-        pen.setWidth(2)
-        pen.setCosmetic(True)
-
         origin = self._plane_origin
         a = self._plane_a
         v = self._plane_v
@@ -316,12 +312,16 @@ class PickingModeHandler:
         half_w = self._plane_half_w
         height = self._plane_height
 
-        projected = []  # (idx, x, y) for visible points
+        fade_dist = 10  # distance at which annotations become fully transparent
+
+        projected = []  # (idx, x, y, alpha) for visible points
         for idx, w in enumerate(self._plane_points_world):
             w = np.array(w, dtype=np.float32)
             vec = w - origin
-            if b is not None and abs(np.dot(vec, b)) > 0.5:
+            dist = abs(np.dot(vec, b)) if b is not None else 0.0
+            if dist > fade_dist:
                 continue
+            alpha = max(0.0, 1.0 - dist / fade_dist)
             x = float(np.dot(vec, a))
             y = float(np.dot(vec, v))
             if x < -half_w or x > half_w or y < 0 or y > height:
@@ -329,13 +329,22 @@ class PickingModeHandler:
             px = x + half_w
             py = y
             half = 3
+            color = QtGui.QColor(0, 0, 255, int(alpha * 255))
+            pen = QtGui.QPen(color)
+            pen.setWidth(2)
+            pen.setCosmetic(True)
             h = scene.addLine(px - half, py, px + half, py, pen)
             vline = scene.addLine(px, py - half, px, py + half, pen)
             self._plane_marker_items.extend([h, vline])
-            projected.append((idx, px, py))
+            projected.append((idx, px, py, alpha))
 
-        for (pi, x1, y1), (ci, x2, y2) in zip(projected, projected[1:]):
+        for (pi, x1, y1, a1), (ci, x2, y2, a2) in zip(projected, projected[1:]):
             if ci == pi + 1:
+                alpha = (a1 + a2) / 2.0
+                color = QtGui.QColor(0, 0, 255, int(alpha * 255))
+                pen = QtGui.QPen(color)
+                pen.setWidth(2)
+                pen.setCosmetic(True)
                 line = scene.addLine(x1, y1, x2, y2, pen)
                 self._plane_marker_items.append(line)
 

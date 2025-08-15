@@ -459,16 +459,18 @@ class TomoViewer(QtWidgets.QWidget):
         if self._verbose:
             print(f"[click.xy] x={wx} y={wy} z={wz}")
         if self.picking_handler.is_active():
-            self.x, self.y, self.z = wx, wy, wz
             if self.picking_handler.is_plane_editing():
-                self._skip_plane_update = True
-            self.scroll_z.setValue(self.z)
-            if self.picking_handler.is_plane_editing():
+                # Keep current Z position when marking the plane to avoid
+                # jumping the slice slider back to the plane's base Z.
+                self.x, self.y = wx, wy
                 self.picking_handler.add_plane_marker((x, y), (wx, wy, wz))
+                self._update_status()
             else:
+                self.x, self.y, self.z = wx, wy, wz
+                self.scroll_z.setValue(self.z)
                 # Use internal method to avoid recomputing coords
                 self.picking_handler._add_point((wx, wy, wz))
-            self._update_status()
+                self._update_status()
         else:
             self.crosshair_visible = True  # Show crosshair after first click
             self.x, self.y, self.z = wx, wy, wz
@@ -550,6 +552,12 @@ class TomoViewer(QtWidgets.QWidget):
                 self.picking_handler.update_plane_for_z(self.z)
             elif not self._skip_plane_update:
                 self.picking_handler.update_plane_for_z(self.z)
+            else:
+                # A plane marker click triggers a temporary skip to avoid
+                # rebuilding the plane for the programmatic scroll_z update.
+                # Re-enable updates after that initial skipped call so the
+                # slider works for subsequent user interactions.
+                self._skip_plane_update = False
             self._update_status()
             self._update_xy_marker_visibility()
         else:

@@ -4,6 +4,9 @@ import numpy as np
 from pathlib import Path
 import re
 
+# Distance in pixels at which annotations become fully transparent.
+FADE_DIST = 10
+
 class PickingModeHandler:
     """
     Encapsulates filament picking + custom-plane definition and rendering.
@@ -314,7 +317,7 @@ class PickingModeHandler:
         half_w = self._plane_half_w
         height = self._plane_height
 
-        fade_dist = 10  # distance at which annotations become fully transparent
+        fade_dist = FADE_DIST  # distance at which annotations become fully transparent
 
         projected = []  # (idx, x, y, alpha) for visible points
         for idx, w in enumerate(self._plane_points_world):
@@ -361,19 +364,19 @@ class PickingModeHandler:
     def _extract_particles(self, points):
         panel = getattr(self.viewer, "picking_panel", None)
         if panel is None:
-            return
+            return None
         smooth_radius = getattr(panel.smooth_radius, "value", lambda: 5)()
         smooth_interval = getattr(panel.smooth_interval, "value", lambda: 2)()
         dz = getattr(panel.subunits_dz, "value", lambda: 7)()
         dphi = getattr(panel.subunits_dphi, "value", lambda: 20)()
         pts = np.array(points, dtype=np.float32)
         if pts.shape[0] < 2:
-            return
+            return None
         diffs = np.diff(pts, axis=0)
         dists = np.linalg.norm(diffs, axis=1)
         cum = np.concatenate(([0.0], np.cumsum(dists)))
         if cum[-1] <= 0:
-            return
+            return None
         s = np.arange(0, cum[-1] + 1e-6, smooth_interval)
         resampled = np.stack([np.interp(s, cum, pts[:, i]) for i in range(3)], axis=1)
         radius = max(1, int(round(smooth_radius / smooth_interval)))
@@ -492,13 +495,22 @@ class PickingModeHandler:
 
         outfile = target_dir / f"raw_{filament_number}.tbl"
         np.savetxt(outfile, data, fmt=fmt, delimiter=" ")
+        # Return path and the smoothed backbone for rendering
+        return outfile, smooth
 
     def finish_plane(self):
         exported = False
         if self._plane_points_world:
             try:
-                self._extract_particles(self._plane_points_world)
-                exported = True
+                result = self._extract_particles(self._plane_points_world)
+                if result is not None:
+                    outfile, smooth = result
+                    if hasattr(self.viewer, "add_model"):
+                        try:
+                            self.viewer.add_model(outfile, smooth)
+                        except Exception:
+                            pass
+                    exported = True
             except Exception:
                 pass
         self._clear_plane_annotations()

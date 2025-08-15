@@ -3,6 +3,7 @@ import sys, os, glob, math, argparse, time
 from collections import OrderedDict
 import threading
 import concurrent.futures
+from pathlib import Path
 
 import numpy as np
 import mrcfile
@@ -15,7 +16,7 @@ from fomo.io.mrcio import fast_header_stats
 from fomo.widgets.slice_view import SliceView
 from fomo.widgets.histogram import HistogramWidget
 from fomo.widgets.picking_panel import PickingSidePanel
-from fomo.features.picking import PickingModeHandler
+from fomo.features.picking import PickingModeHandler, FADE_DIST
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -109,6 +110,10 @@ class TomoViewer(QtWidgets.QWidget):
 
         # Picking mode handler
         self.picking_handler = PickingModeHandler(self)
+
+        # Model overlays (smoothed filaments)
+        self.models = []  # [{'name': str, 'points': np.ndarray}]
+        self._model_items = []
 
         # Preload metadata before building UI
         self._preload_metadata()
@@ -308,6 +313,9 @@ class TomoViewer(QtWidgets.QWidget):
         self.view_xy.dynamic_fit = True
         self.view_xz.dynamic_fit = True
 
+        # Load any saved models for this tomogram
+        self._load_models_for_file(idx)
+
         # Contrast from header/subsample
         if TomoViewer.last_contrast:
             self.minv, self.maxv = TomoViewer.last_contrast
@@ -414,6 +422,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._fit_views_only()
         self._update_status()
         self._update_xy_marker_visibility()
+        self._update_model_overlays()
 
     def _update_xz_immediate(self):
         if not self.xz_visible:
@@ -500,6 +509,80 @@ class TomoViewer(QtWidgets.QWidget):
         """Placeholder slot for activating a model from the models list."""
         if self._verbose:
             print(f"[models] activated {name}")
+            
+    # ---------- Model overlay handling ----------
+    def _clear_models(self):
+        scene = self.view_xy.scene()
+        for items in self._model_items:
+            for item in items:
+                try:
+                    scene.removeItem(item)
+                except Exception:
+                    pass
+        self._model_items.clear()
+        self.models.clear()
+        self.picking_panel.model_list.clear()
+
+    def add_model(self, tbl_path, points):
+        name = Path(tbl_path).name if not isinstance(tbl_path, Path) else tbl_path.name
+        pts = np.array(points, dtype=np.float32)
+        self.models.append({'name': name, 'points': pts})
+        self.picking_panel.model_list.addItem(name)
+        self._update_model_overlays()
+
+    def _update_model_overlays(self):
+        scene = self.view_xy.scene()
+        for items in self._model_items:
+            for item in items:
+                try:
+                    scene.removeItem(item)
+                except Exception:
+                    pass
+        self._model_items = []
+        fade = FADE_DIST
+        for model in self.models:
+            pts = model['points']
+            projected = []
+            for p in pts:
+                dist = abs(p[2] - self.z)
+                if dist > fade:
+                    continue
+                alpha = max(0.0, 1.0 - dist / fade)
+                projected.append((p[0], p[1], alpha))
+            items = []
+            if len(projected) >= 2:
+                for (x1, y1, a1), (x2, y2, a2) in zip(projected, projected[1:]):
+                    alpha = int(((a1 + a2) / 2.0) * 255)
+                    if alpha <= 0:
+                        continue
+                    color = QtGui.QColor(0, 255, 0, alpha)
+                    pen = QtGui.QPen(color)
+                    pen.setWidth(2)
+                    pen.setCosmetic(True)
+                    line = scene.addLine(x1, y1, x2, y2, pen)
+                    items.append(line)
+            self._model_items.append(items)
+
+    def _load_models_for_file(self, idx):
+        self._clear_models()
+        tomogram_path = Path(self.files[idx])
+        tomogram_name = tomogram_path.stem
+        root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not root_dir.exists():
+            return
+        target_dir = None
+        for d in root_dir.iterdir():
+            if d.is_dir() and d.name.endswith(tomogram_name):
+                target_dir = d
+                break
+        if target_dir is None:
+            return
+        for tbl in sorted(target_dir.glob("raw_*.tbl")):
+            try:
+                coords = np.loadtxt(tbl, usecols=(0, 1, 2))
+            except Exception:
+                continue
+            self.add_model(tbl, coords)
 
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):

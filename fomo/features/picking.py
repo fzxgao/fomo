@@ -356,7 +356,62 @@ class PickingModeHandler:
         wx, wy, wz = world_pos
         print(f"X={int(round(wx))} Y={int(round(wy))} Z={int(round(wz))}")
 
+    def _extract_particles(self, points):
+        panel = getattr(self.viewer, "picking_panel", None)
+        if panel is None:
+            return
+        smooth_radius = getattr(panel.smooth_radius, "value", lambda: 5)()
+        smooth_interval = getattr(panel.smooth_interval, "value", lambda: 2)()
+        dz = getattr(panel.subunits_dz, "value", lambda: 7)()
+        dphi = getattr(panel.subunits_dphi, "value", lambda: 20)()
+        pts = np.array(points, dtype=np.float32)
+        if pts.shape[0] < 2:
+            return
+        diffs = np.diff(pts, axis=0)
+        dists = np.linalg.norm(diffs, axis=1)
+        cum = np.concatenate(([0.0], np.cumsum(dists)))
+        if cum[-1] <= 0:
+            return
+        s = np.arange(0, cum[-1] + 1e-6, smooth_interval)
+        resampled = np.stack([np.interp(s, cum, pts[:, i]) for i in range(3)], axis=1)
+        radius = max(1, int(round(smooth_radius / smooth_interval)))
+        kernel = np.ones(2 * radius + 1, dtype=np.float32)
+        kernel /= kernel.sum()
+        padded = np.pad(resampled, ((radius, radius), (0, 0)), mode="edge")
+        smooth = np.stack(
+            [np.convolve(padded[:, i], kernel, mode="valid") for i in range(3)],
+            axis=1,
+        )
+        diffs = np.diff(smooth, axis=0)
+        dists = np.linalg.norm(diffs, axis=1)
+        cum = np.concatenate(([0.0], np.cumsum(dists)))
+        s = np.arange(0, cum[-1] + 1e-6, dz)
+        sampled = np.stack([np.interp(s, cum, smooth[:, i]) for i in range(3)], axis=1)
+        tangents = np.zeros_like(sampled)
+        if len(sampled) > 1:
+            tangents[1:-1] = sampled[2:] - sampled[:-2]
+            tangents[0] = sampled[1] - sampled[0]
+            tangents[-1] = sampled[-1] - sampled[-2]
+        norms = np.linalg.norm(tangents, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        tangents /= norms
+        tdrot = np.degrees(np.arctan2(tangents[:, 0], tangents[:, 1]))
+        tilt = np.degrees(np.arccos(tangents[:, 2]))
+        idx = np.arange(len(tdrot))
+        narot = (-tdrot + idx * dphi + 180) % 360 - 180
+        data = np.column_stack([sampled, tdrot, tilt, narot])
+        np.savetxt("coordinates.tsv", data, fmt="%.4f", delimiter="\t")
+        try:
+            self.viewer.lbl.setText("Extracted")
+        except Exception:
+            pass
+
     def finish_plane(self):
+        if self._plane_points_world:
+            try:
+                self._extract_particles(self._plane_points_world)
+            except Exception:
+                pass
         self._clear_plane_annotations()
         self._line = None
         self._plane_origin = None

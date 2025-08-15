@@ -42,20 +42,27 @@ class PickingSidePanel(QtWidgets.QSplitter):
     # -------- Filament parameters panel --------
     def _build_params_panel(self):
         params_widget = QtWidgets.QWidget()
-        form = QtWidgets.QFormLayout(params_widget)
+        v = QtWidgets.QVBoxLayout(params_widget)
+        v.addWidget(QtWidgets.QLabel("Filament parameters"))
+        form = QtWidgets.QFormLayout()
         self.smooth_radius = QtWidgets.QDoubleSpinBox()
+        self.smooth_radius.setValue(5)
         form.addRow("Smoothing radius (in pixels)", self.smooth_radius)
         self.smooth_interval = QtWidgets.QDoubleSpinBox()
+        self.smooth_interval.setValue(2)
         form.addRow("Interval in backbone for smoothing (in pixels)", self.smooth_interval)
         self.subunits_dz = QtWidgets.QDoubleSpinBox()
+        self.subunits_dz.setValue(7)
         form.addRow("Subunits dz (in pixels, 1/3 to 1/2 of the Helical pitch, if known)", self.subunits_dz)
         self.subunits_dphi = QtWidgets.QDoubleSpinBox()
+        self.subunits_dphi.setValue(20)
         form.addRow("Subunits dphi (in degrees, 1/3 to 1/2 of the Helical twist, if known)", self.subunits_dphi)
         self.box_size = QtWidgets.QDoubleSpinBox()
         form.addRow("Box size (in pixels)", self.box_size)
         self.extract_btn = QtWidgets.QPushButton("Extract particles")
         self.extract_btn.setEnabled(False)
         form.addRow(self.extract_btn)
+        v.addLayout(form)
         self.addWidget(params_widget)
 
         # Disable extract button when there are no models

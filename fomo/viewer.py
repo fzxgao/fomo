@@ -719,6 +719,7 @@ class TomoViewer(QtWidgets.QWidget):
                 self.picking_handler.update_plane_for_z(self.z)
             self._update_status()
             self._update_xy_marker_visibility()
+            self._update_model_overlays()
             self._skip_plane_update = False
             return
 
@@ -734,3 +735,4 @@ class TomoViewer(QtWidgets.QWidget):
                 self.view_xz.hide_crosshair()
         self._update_status()
         self._update_xy_marker_visibility()
+        self._update_model_overlays()

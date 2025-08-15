@@ -401,15 +401,13 @@ class PickingModeHandler:
         narot = (-tdrot + idx * dphi + 180) % 360 - 180
         data = np.column_stack([sampled, tdrot, tilt, narot])
         np.savetxt("coordinates.tsv", data, fmt="%.4f", delimiter="\t")
-        try:
-            self.viewer.lbl.setText("Extracted")
-        except Exception:
-            pass
 
     def finish_plane(self):
+        exported = False
         if self._plane_points_world:
             try:
                 self._extract_particles(self._plane_points_world)
+                exported = True
             except Exception:
                 pass
         self._clear_plane_annotations()
@@ -424,6 +422,8 @@ class PickingModeHandler:
         self._plane_points_world.clear()
         try:
             self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)
+            if exported:
+                self._append_status(" | Points exported")
         except Exception:
             pass
 

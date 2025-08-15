@@ -1,6 +1,8 @@
 # fomo/features/picking.py
 from PyQt5 import QtCore, QtGui
 import numpy as np
+from pathlib import Path
+import re
 
 class PickingModeHandler:
     """
@@ -399,8 +401,97 @@ class PickingModeHandler:
         tilt = np.degrees(np.arccos(tangents[:, 2]))
         idx = np.arange(len(tdrot))
         narot = (-tdrot + idx * dphi + 180) % 360 - 180
-        data = np.column_stack([sampled, tdrot, tilt, narot])
-        np.savetxt("coordinates.tsv", data, fmt="%.4f", delimiter="\t")
+        # Prepare Dynamo raw.tbl output
+        tomogram_path = Path(self.viewer.files[self.viewer.idx])
+        tomogram_name = tomogram_path.stem
+
+        root_dir = Path.cwd() / "fomo_dynamo_catalogue"
+        tomo_dir = root_dir / "tomograms"
+        tomo_dir.mkdir(parents=True, exist_ok=True)
+
+        target_dir = None
+        tomogram_number = None
+        for d in tomo_dir.iterdir():
+            if d.is_dir() and d.name.endswith(tomogram_name):
+                target_dir = d
+                m = re.match(r"^volume_(\d+)_", d.name)
+                if m:
+                    tomogram_number = int(m.group(1))
+                break
+        if target_dir is None:
+            existing = []
+            for d in tomo_dir.iterdir():
+                m = re.match(r"^volume_(\d+)_", d.name)
+                if m:
+                    existing.append(int(m.group(1)))
+            tomogram_number = max(existing or [0]) + 1
+            target_dir = tomo_dir / f"volume_{tomogram_number}_{tomogram_name}"
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+        existing_filaments = []
+        for f in target_dir.glob("raw_*.tbl"):
+            m = re.match(r"raw_(\d+)\.tbl", f.name)
+            if m:
+                existing_filaments.append(int(m.group(1)))
+        filament_number = max(existing_filaments or [0]) + 1
+
+        n = len(sampled)
+        tag = np.arange(1, n + 1)
+        ones = np.ones(n, dtype=int)
+        zeros = np.zeros(n)
+        data = np.column_stack([
+            tag,            # 1 tag
+            ones,           # 2 aligned
+            ones,           # 3 averaged
+            tangents[:, 0], # 4 dx
+            tangents[:, 1], # 5 dy
+            tangents[:, 2], # 6 dz
+            tdrot,          # 7 tdrot
+            tilt,           # 8 tilt
+            narot,          # 9 narot
+            zeros,          # 10 cc
+            zeros,          # 11 cc2
+            zeros,          # 12 cpu
+            ones,           # 13 ftype
+            np.full(n, -60),# 14 ymintilt
+            np.full(n, 60), # 15 ymaxtilt
+            np.full(n, -60),# 16 xmintilt
+            np.full(n, 60), # 17 xmaxtilt
+            zeros,          # 18 fs1
+            zeros,          # 19 fs2
+            np.full(n, tomogram_number), # 20 tomo
+            zeros,          # 21 reg
+            zeros,          # 22 class
+            zeros,          # 23 annotation
+            sampled[:, 0],  # 24 x
+            sampled[:, 1],  # 25 y
+            sampled[:, 2],  # 26 z
+            zeros,          # 27 dshift
+            zeros,          # 28 daxis
+            zeros,          # 29 dnarot
+            zeros,          # 30 dcc
+            zeros,          # 31 otag
+            ones,           # 32 npar
+            zeros,          # 33
+            zeros,          # 34 ref
+            zeros,          # 35 sref
+        ])
+
+        fmt = [
+            '%d', '%d', '%d',
+            '%.6f', '%.6f', '%.6f',
+            '%.2f', '%.2f', '%.2f',
+            '%d', '%d', '%d',
+            '%d', '%d', '%d', '%d', '%d',
+            '%d', '%d', '%d',
+            '%d', '%d', '%d',
+            '%.1f', '%.1f', '%.1f',
+            '%d', '%d', '%d', '%d',
+            '%d', '%d', '%d', '%d', '%d'
+        ]
+
+        outfile = target_dir / f"raw_{filament_number}.tbl"
+        np.savetxt(outfile, data, fmt=fmt, delimiter=" ")
 
     def finish_plane(self):
         exported = False

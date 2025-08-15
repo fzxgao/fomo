@@ -539,28 +539,24 @@ class TomoViewer(QtWidgets.QWidget):
                 except Exception:
                     pass
         self._model_items = []
-        fade = FADE_DIST
+        fade_dist = FADE_DIST
         for model in self.models:
             pts = model['points']
-            projected = []
-            for p in pts:
-                dist = abs(p[2] - self.z)
-                if dist > fade:
-                    continue
-                alpha = max(0.0, 1.0 - dist / fade)
-                projected.append((p[0], p[1], alpha))
             items = []
-            if len(projected) >= 2:
-                for (x1, y1, a1), (x2, y2, a2) in zip(projected, projected[1:]):
-                    alpha = int(((a1 + a2) / 2.0) * 255)
-                    if alpha <= 0:
-                        continue
-                    color = QtGui.QColor(0, 255, 0, alpha)
-                    pen = QtGui.QPen(color)
-                    pen.setWidth(2)
-                    pen.setCosmetic(True)
-                    line = scene.addLine(x1, y1, x2, y2, pen)
-                    items.append(line)
+            for (x1, y1, z1), (x2, y2, z2) in zip(pts, pts[1:]):
+                dist1 = abs(z1 - self.z)
+                dist2 = abs(z2 - self.z)
+                if dist1 > fade_dist and dist2 > fade_dist:
+                    continue
+                alpha1 = max(0.0, 1.0 - dist1 / fade_dist)
+                alpha2 = max(0.0, 1.0 - dist2 / fade_dist)
+                alpha = (alpha1 + alpha2) / 2.0
+                color = QtGui.QColor(0, 255, 0, int(alpha * 255))
+                pen = QtGui.QPen(color)
+                pen.setWidth(2)
+                pen.setCosmetic(True)
+                line = scene.addLine(x1, y1, x2, y2, pen)
+                items.append(line)
             self._model_items.append(items)
 
     def _load_models_for_file(self, idx):
@@ -579,7 +575,7 @@ class TomoViewer(QtWidgets.QWidget):
             return
         for tbl in sorted(target_dir.glob("raw_*.tbl")):
             try:
-                coords = np.loadtxt(tbl, usecols=(0, 1, 2))
+                coords = np.loadtxt(tbl, usecols=(23, 24, 25))
             except Exception:
                 continue
             self.add_model(tbl, coords)

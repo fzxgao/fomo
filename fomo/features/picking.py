@@ -204,9 +204,20 @@ class PickingModeHandler:
                 + (x - self._plane_half_w) * self._plane_a
                 + y * self._plane_v
             )
-            return tuple(int(round(c)) for c in world)
+            return tuple(float(c) for c in world)
         else:
-            return int(x), int(y), int(self.viewer.z)
+            return float(x), float(y), float(self.viewer.z)
+
+    def volume_to_plane(self, x, y, z):
+        """Project a world coordinate (x, y, z) into plane-local (px, py)."""
+        if not (self.has_plane() and self._plane_origin is not None):
+            return float(x), float(y)
+
+        w = np.array([x, y, z], dtype=np.float32)
+        vec = w - self._plane_origin
+        px = float(np.dot(vec, self._plane_a)) + self._plane_half_w
+        py = float(np.dot(vec, self._plane_v))
+        return px, py
     def _show_custom_plane(self, p1, p2):
         """Store picked points and render their orthogonal plane."""
         p1 = np.array(p1, dtype=np.float32)

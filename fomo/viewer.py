@@ -303,7 +303,7 @@ class TomoViewer(QtWidgets.QWidget):
         data = mrc.data  # memmap
         self.data = data
         self.Z, self.Y, self.X = data.shape
-        self.x, self.y, self.z = self.X // 2, self.Y // 2, self.Z // 2
+        self.x, self.y, self.z = float(self.X // 2), float(self.Y // 2), float(self.Z // 2)
 
         # Switch to per-file cache (create if missing)
         self.cache = self.slice_caches.get(idx)
@@ -347,7 +347,7 @@ class TomoViewer(QtWidgets.QWidget):
             self._built_scroll_conn = True
         self.scroll_z.blockSignals(True)
         self.scroll_z.setRange(0, self.Z - 1)
-        self.scroll_z.setValue(self.z)
+        self.scroll_z.setValue(int(round(self.z)))
         self.scroll_z.blockSignals(False)
 
         # Restore layout from picking mode exit
@@ -407,10 +407,14 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Rendering ----------
     def _refresh_views(self, delayed_xz=False):
-        qimg_xy, _ = self._get_xy(self.z)
+        qimg_xy, _ = self._get_xy(int(round(self.z)))
         self.view_xy.set_image(qimg_xy)
         if self.crosshair_visible:
-            self.view_xy.set_crosshair(self.x, self.y)
+            if self.picking_handler.has_plane():
+                px, py = self.picking_handler.volume_to_plane(self.x, self.y, self.z)
+                self.view_xy.set_crosshair(px, py)
+            else:
+                self.view_xy.set_crosshair(self.x, self.y)
         else:
             self.view_xy.hide_crosshair()  # Use the new method
 
@@ -427,7 +431,7 @@ class TomoViewer(QtWidgets.QWidget):
     def _update_xz_immediate(self):
         if not self.xz_visible:
             return
-        qimg_xz, _ = self._get_xz(self.y)
+        qimg_xz, _ = self._get_xz(int(round(self.y)))
         self.view_xz.set_image(qimg_xz)
         if self.crosshair_visible:
             self.view_xz.set_crosshair(self.x, self.z)
@@ -476,14 +480,14 @@ class TomoViewer(QtWidgets.QWidget):
                 self._update_status()
             else:
                 self.x, self.y, self.z = wx, wy, wz
-                self.scroll_z.setValue(self.z)
+                self.scroll_z.setValue(int(round(self.z)))
                 # Use internal method to avoid recomputing coords
                 self.picking_handler._add_point((wx, wy, wz))
                 self._update_status()
         else:
             self.crosshair_visible = True  # Show crosshair after first click
             self.x, self.y, self.z = wx, wy, wz
-            self.scroll_z.setValue(self.z)
+            self.scroll_z.setValue(int(round(self.z)))
             self._refresh_views(delayed_xz=self.xz_visible)
 
     def _clicked_xz(self, x, z):
@@ -491,10 +495,10 @@ class TomoViewer(QtWidgets.QWidget):
             return
         if not self.picking_handler.is_active():
             self.crosshair_visible = True  # Show crosshair after first click
-        self.x, self.z = x, z
+        self.x, self.z = float(x), float(z)
         if self._verbose:
             print(f"[click.xz] x={self.x} y={self.y} z={self.z}")
-        self.scroll_z.setValue(self.z)
+        self.scroll_z.setValue(int(round(self.z)))
         self._refresh_views(delayed_xz=self.xz_visible)
     
     def _hide_crosshair(self):
@@ -616,16 +620,16 @@ class TomoViewer(QtWidgets.QWidget):
         if self.picking_handler.is_active() and self.picking_handler.has_plane():
             scale = max(1, int(round(abs(step) * 0.1)))
             step = int(math.copysign(scale, step))
-        self.z = int(np.clip(self.z + step, 0, self.Z - 1))
+        self.z = float(np.clip(self.z + step, 0, self.Z - 1))
         self.scroll_z.blockSignals(True)
-        self.scroll_z.setValue(self.z)
+        self.scroll_z.setValue(int(round(self.z)))
         self.scroll_z.blockSignals(False)
         self._scroll_timer.stop()
         self._scroll_timer.start(10)
         self._update_xy_marker_visibility()
 
     def _set_z(self, val):
-        self.z = val
+        self.z = float(val)
         if self.picking_handler.is_active() and self.picking_handler.has_plane():
             if not self.picking_handler.is_plane_editing():
                 self.picking_handler.update_plane_for_z(self.z)
@@ -723,7 +727,7 @@ class TomoViewer(QtWidgets.QWidget):
             self._skip_plane_update = False
             return
 
-        qimg_xy, _ = self._get_xy(self.z)
+        qimg_xy, _ = self._get_xy(int(round(self.z)))
         self.view_xy.set_image(qimg_xy)
         if self.crosshair_visible:
             self.view_xy.set_crosshair(self.x, self.y)

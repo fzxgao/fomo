@@ -4,6 +4,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 class SliceView(QtWidgets.QGraphicsView):
     clicked = QtCore.pyqtSignal(int, int)
+    dragged = QtCore.pyqtSignal(int, int)
+    released = QtCore.pyqtSignal()
     wheel_delta = QtCore.pyqtSignal(int)
 
     def __init__(self, *, verbose=False, name="view",
@@ -32,6 +34,7 @@ class SliceView(QtWidgets.QGraphicsView):
         self.img_w = 1
         self.img_h = 1
         self.dynamic_fit = True
+        self._drag_active = False
 
         self._wheel_last_ts = 0.0
         self._wheel_streak = 0
@@ -111,4 +114,19 @@ class SliceView(QtWidgets.QGraphicsView):
             x = int(np.clip(round(pos.x()), 0, self.img_w - 1))
             y = int(np.clip(round(pos.y()), 0, self.img_h - 1))
             self.clicked.emit(x, y)
+            self._drag_active = True
         super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        if self._drag_active:
+            pos = self.mapToScene(ev.pos())
+            x = int(np.clip(round(pos.x()), 0, self.img_w - 1))
+            y = int(np.clip(round(pos.y()), 0, self.img_h - 1))
+            self.dragged.emit(x, y)
+        super().mouseMoveEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        if ev.button() == QtCore.Qt.LeftButton and self._drag_active:
+            self._drag_active = False
+            self.released.emit()
+        super().mouseReleaseEvent(ev)

@@ -73,3 +73,10 @@ class PickingSidePanel(QtWidgets.QSplitter):
 
     def _update_extract_state(self):
         self.extract_btn.setEnabled(self.model_list.count() > 0)
+
+    def wheelEvent(self, event):
+        """
+        Ignore wheel events so scrolling the tomogram doesn't
+        unintentionally resize the panel splitter.
+        """
+        event.ignore()

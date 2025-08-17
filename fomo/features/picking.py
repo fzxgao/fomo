@@ -33,6 +33,9 @@ class PickingModeHandler:
         self._plane_editing = False
         self._plane_marker_items = []
         self._plane_points_world = []
+        self._editing_paths = None  # (raw_path, xyz_path) when editing existing filaments
+        self._drag_index = None
+        self._dragging = False
 
     # -------- Public API --------
     def is_active(self):
@@ -364,15 +367,62 @@ class PickingModeHandler:
                 line = scene.addLine(x1, y1, x2, y2, pen)
                 self._plane_marker_items.append(line)
 
+    def _find_nearest_plane_point(self, view_pos, threshold=5):
+        if not self._plane_points_world or self._plane_origin is None:
+            return None
+        px, py = view_pos
+        origin = self._plane_origin
+        a = self._plane_a
+        v = self._plane_v
+        half_w = self._plane_half_w
+        nearest = None
+        min_dist = float("inf")
+        for idx, w in enumerate(self._plane_points_world):
+            vec = np.array(w, dtype=np.float32) - origin
+            x = float(np.dot(vec, a)) + half_w
+            y = float(np.dot(vec, v))
+            dist = float(np.hypot(px - x, py - y))
+            if dist < threshold and dist < min_dist:
+                nearest = idx
+                min_dist = dist
+        return nearest
+
     def add_plane_marker(self, view_pos, world_pos):
         if not self._plane_editing:
             return
-        self._plane_points_world.append(tuple(float(c) for c in world_pos))
-        self._redraw_plane_annotations()
-        wx, wy, wz = world_pos
-        print(f"X={int(round(wx))} Y={int(round(wy))} Z={int(round(wz))}")
+        idx = self._find_nearest_plane_point(view_pos)
+        if idx is not None:
+            self._drag_index = idx
+            self._dragging = False
+        else:
+            self._plane_points_world.append(tuple(float(c) for c in world_pos))
+            self._redraw_plane_annotations()
+            self._drag_index = len(self._plane_points_world) - 1
+            self._dragging = False
+            wx, wy, wz = world_pos
+            print(f"X={int(round(wx))} Y={int(round(wy))} Z={int(round(wz))}")
 
-    def _extract_particles(self, points):
+    def move_plane_marker(self, x, y):
+        if not self._plane_editing or self._drag_index is None:
+            return
+        wx, wy, wz = self.map_xy_to_volume(x, y)
+        self._plane_points_world[self._drag_index] = (float(wx), float(wy), float(wz))
+        self._dragging = True
+        self._redraw_plane_annotations()
+
+    def release_plane_marker(self):
+        if not self._plane_editing:
+            return
+        if self._drag_index is not None and not self._dragging:
+            try:
+                self._plane_points_world.pop(self._drag_index)
+            except Exception:
+                pass
+            self._redraw_plane_annotations()
+        self._drag_index = None
+        self._dragging = False
+
+    def _extract_particles(self, points, overwrite_tbl: Path = None):
         panel = getattr(self.viewer, "picking_panel", None)
         if panel is None:
             return None
@@ -425,29 +475,38 @@ class PickingModeHandler:
 
         target_dir = None
         tomogram_number = None
-        for d in tomo_dir.iterdir():
-            if d.is_dir() and d.name.endswith(tomogram_name):
-                target_dir = d
-                m = re.match(r"^volume_(\d+)_", d.name)
-                if m:
-                    tomogram_number = int(m.group(1))
-                break
-        if target_dir is None:
-            existing = []
-            for d in tomo_dir.iterdir():
-                m = re.match(r"^volume_(\d+)_", d.name)
-                if m:
-                    existing.append(int(m.group(1)))
-            tomogram_number = max(existing or [0]) + 1
-            target_dir = tomo_dir / f"volume_{tomogram_number}_{tomogram_name}"
-            target_dir.mkdir(parents=True, exist_ok=True)
-
-        existing_filaments = []
-        for f in target_dir.glob("raw_*.tbl"):
-            m = re.match(r"raw_(\d+)\.tbl", f.name)
+        if overwrite_tbl is not None:
+            outfile = Path(overwrite_tbl)
+            target_dir = outfile.parent
+            m = re.match(r"^volume_(\d+)_", target_dir.name)
             if m:
-                existing_filaments.append(int(m.group(1)))
-        filament_number = max(existing_filaments or [0]) + 1
+                tomogram_number = int(m.group(1))
+        else:
+            for d in tomo_dir.iterdir():
+                if d.is_dir() and d.name.endswith(tomogram_name):
+                    target_dir = d
+                    m = re.match(r"^volume_(\d+)_", d.name)
+                    if m:
+                        tomogram_number = int(m.group(1))
+                    break
+            if target_dir is None:
+                existing = []
+                for d in tomo_dir.iterdir():
+                    m = re.match(r"^volume_(\d+)_", d.name)
+                    if m:
+                        existing.append(int(m.group(1)))
+                tomogram_number = max(existing or [0]) + 1
+                target_dir = tomo_dir / f"volume_{tomogram_number}_{tomogram_name}"
+                target_dir.mkdir(parents=True, exist_ok=True)
+
+        filament_number = None
+        if overwrite_tbl is None:
+            existing_filaments = []
+            for f in target_dir.glob("raw_*.tbl"):
+                m = re.match(r"raw_(\d+)\.tbl", f.name)
+                if m:
+                    existing_filaments.append(int(m.group(1)))
+            filament_number = max(existing_filaments or [0]) + 1
 
         n = len(sampled)
         tag = np.arange(1, n + 1)
@@ -504,7 +563,10 @@ class PickingModeHandler:
             '%d', '%d', '%d', '%d', '%d'
         ]
 
-        outfile = target_dir / f"raw_{filament_number}.tbl"
+        if overwrite_tbl is not None:
+            outfile = Path(overwrite_tbl)
+        else:
+            outfile = target_dir / f"raw_{filament_number:03d}.tbl"
         np.savetxt(outfile, data, fmt=fmt, delimiter=" ")
         # Return path and the smoothed backbone for rendering
         return outfile, smooth
@@ -513,9 +575,18 @@ class PickingModeHandler:
         exported = False
         if self._plane_points_world:
             try:
-                result = self._extract_particles(self._plane_points_world)
+                existing_raw = existing_xyz = None
+                if self._editing_paths is not None:
+                    existing_raw, existing_xyz = self._editing_paths
+                result = self._extract_particles(self._plane_points_world, overwrite_tbl=existing_raw)
                 if result is not None:
                     outfile, smooth = result
+                    pts_arr = np.array(self._plane_points_world, dtype=np.float32)
+                    if existing_xyz is not None:
+                        xyz_path = Path(existing_xyz)
+                    else:
+                        xyz_path = outfile.with_name(outfile.name.replace("raw_", "xyz_").replace(".tbl", ".csv"))
+                    np.savetxt(xyz_path, pts_arr, fmt="%.6f", delimiter=",")
                     if hasattr(self.viewer, "add_model"):
                         try:
                             self.viewer.add_model(outfile, smooth)
@@ -524,6 +595,7 @@ class PickingModeHandler:
                     exported = True
             except Exception:
                 pass
+        self._editing_paths = None
         self._clear_plane_annotations()
         self._line = None
         self._plane_origin = None

@@ -187,6 +187,8 @@ class TomoViewer(QtWidgets.QWidget):
 
         self.view_xy.clicked.connect(self._clicked_xy)
         self.view_xz.clicked.connect(self._clicked_xz)
+        self.view_xy.dragged.connect(self._dragged_xy)
+        self.view_xy.released.connect(self._released_xy)
         self.view_xy.wheel_delta.connect(self._step_z)
         self.view_xz.wheel_delta.connect(self._step_z)
 
@@ -500,6 +502,14 @@ class TomoViewer(QtWidgets.QWidget):
             print(f"[click.xz] x={self.x} y={self.y} z={self.z}")
         self.scroll_z.setValue(int(round(self.z)))
         self._refresh_views(delayed_xz=self.xz_visible)
+
+    def _dragged_xy(self, x, y):
+        if self.picking_handler.is_active() and self.picking_handler.is_plane_editing():
+            self.picking_handler.move_plane_marker(x, y)
+
+    def _released_xy(self):
+        if self.picking_handler.is_active() and self.picking_handler.is_plane_editing():
+            self.picking_handler.release_plane_marker()
     
     def _hide_crosshair(self):
         self.crosshair_visible = False
@@ -510,9 +520,34 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- Models panel ----------
     def activate_model(self, name: str):
-        """Placeholder slot for activating a model from the models list."""
-        if self._verbose:
-            print(f"[models] activated {name}")
+        model = next((m for m in self.models if m['name'] == name), None)
+        if model is None:
+            return
+        raw_path = model.get('path')
+        xyz_path = raw_path.with_name(raw_path.name.replace("raw_", "xyz_").replace(".tbl", ".csv"))
+        if not xyz_path.exists():
+            if self._verbose:
+                print(f"[models] missing xyz for {name}")
+            return
+        try:
+            pts = np.loadtxt(xyz_path, delimiter=",")
+            pts = np.atleast_2d(pts)
+            if pts.shape[0] < 2:
+                return
+            p1 = pts[0]
+            p2 = pts[-1]
+            v = p2 - p1
+            p1_ext = p1 - 0.05 * v
+            p2_ext = p2 + 0.05 * v
+            self.picking_handler._show_custom_plane(p1_ext.astype(np.float32), p2_ext.astype(np.float32))
+            self.picking_handler._plane_points_world = [tuple(float(c) for c in row) for row in pts]
+            self.picking_handler._redraw_plane_annotations()
+            self.picking_handler._editing_paths = (raw_path, xyz_path)
+            self.picking_handler._drag_index = None
+            self.picking_handler._dragging = False
+        except Exception as e:
+            if self._verbose:
+                print(f"[models] failed to activate {name}: {e}")
             
     # ---------- Model overlay handling ----------
     def _clear_models(self):
@@ -528,9 +563,16 @@ class TomoViewer(QtWidgets.QWidget):
         self.picking_panel.model_list.clear()
 
     def add_model(self, tbl_path, points):
-        name = Path(tbl_path).name if not isinstance(tbl_path, Path) else tbl_path.name
+        path = Path(tbl_path)
+        name = path.name
         pts = np.array(points, dtype=np.float32)
-        self.models.append({'name': name, 'points': pts})
+        for model in self.models:
+            if model['name'] == name:
+                model['points'] = pts
+                model['path'] = path
+                self._update_model_overlays()
+                return
+        self.models.append({'name': name, 'points': pts, 'path': path})
         self.picking_panel.model_list.addItem(name)
         self._update_model_overlays()
 

@@ -636,7 +636,20 @@ class PickingModeHandler:
         try:
             self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)
             if exported:
+                # Temporarily replace the picking-mode tag with an export
+                # confirmation so the status bar width doesn't grow.
+                self._remove_status_tag(" | PICKING MODE ACTIVATED")
+                self._remove_status_tag(" | Points exported")
                 self._append_status(" | Points exported")
+
+                def _restore_export_status():
+                    # Remove the export notice and re-display picking mode if
+                    # still active.
+                    self._remove_status_tag(" | Points exported")
+                    if self._active:
+                        self._append_status(" | PICKING MODE ACTIVATED")
+
+                QtCore.QTimer.singleShot(2000, _restore_export_status)
         except Exception:
             pass
 

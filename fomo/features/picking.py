@@ -102,6 +102,7 @@ class PickingModeHandler:
         self._points.clear()
         self.finish_plane()
 
+        self.cleanup_empty_model_dirs()
 
         # Restore layout
         if self._saved_layout is not None:
@@ -191,6 +192,10 @@ class PickingModeHandler:
         xw, yw, zw = self.map_xy_to_volume(x, y)
         self._add_point((xw, yw, zw))
 
+    def cancel_points(self):
+        """Clear any in-progress points defining a new plane."""
+        self._points.clear()
+
     def _add_point(self, p):
         """Internal: add a point and act when we have two."""
         self._points.append(p)
@@ -232,6 +237,34 @@ class PickingModeHandler:
     def _remove_status_tag(self, tag: str):
         try:
             self.viewer.lbl.setText(self.viewer.lbl.text().replace(tag, ""))
+        except Exception:
+            pass
+
+    def cleanup_empty_model_dirs(self):
+        """Remove empty volume directories for the current tomogram."""
+        try:
+            tomogram_path = Path(self.viewer.files[self.viewer.idx])
+            tomogram_name = tomogram_path.stem
+            root_dir = Path.cwd() / "fomo_dynamo_catalogue"
+            tomo_dir = root_dir / "tomograms"
+            if not tomo_dir.exists():
+                return
+            removed = False
+            for d in list(tomo_dir.iterdir()):
+                if d.is_dir() and d.name.endswith(tomogram_name) and not any(d.iterdir()):
+                    try:
+                        d.rmdir()
+                        removed = True
+                    except Exception:
+                        pass
+            if removed:
+                try:
+                    if not any(tomo_dir.iterdir()):
+                        tomo_dir.rmdir()
+                        if not any(root_dir.iterdir()):
+                            root_dir.rmdir()
+                except Exception:
+                    pass
         except Exception:
             pass
 

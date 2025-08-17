@@ -518,6 +518,8 @@ class TomoViewer(QtWidgets.QWidget):
         self.view_xz.hide_crosshair()
         if hasattr(self, "clear_marker_xy"):
             self.clear_marker_xy()
+        if self.picking_handler.is_active():
+            self.picking_handler.cancel_points()
 
     # ---------- Models panel ----------
     def activate_model(self, name: str):
@@ -600,6 +602,7 @@ class TomoViewer(QtWidgets.QWidget):
                 print(f"[models] failed to delete xyz for {name}: {e}")
         self.models = [m for m in self.models if m['name'] != name]
         self._update_model_overlays()
+        self.picking_handler.cleanup_empty_model_dirs()
 
     def _update_model_overlays(self):
         scene = self.view_xy.scene()

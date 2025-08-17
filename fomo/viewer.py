@@ -582,11 +582,22 @@ class TomoViewer(QtWidgets.QWidget):
         if model is None:
             return
         path = model.get('path')
+        # The raw_*.tbl files have a matching xyz_*.csv with the same stem.
+        # When removing a model we want to tidy up both files.
+        xyz_path = path.with_name(path.name.replace("raw_", "xyz_").replace(".tbl", ".csv"))
         try:
             path.unlink()
         except Exception as e:
             if self._verbose:
                 print(f"[models] failed to delete {name}: {e}")
+        try:
+            xyz_path.unlink()
+        except FileNotFoundError:
+            # It's fine if the xyz csv does not exist.
+            pass
+        except Exception as e:
+            if self._verbose:
+                print(f"[models] failed to delete xyz for {name}: {e}")
         self.models = [m for m in self.models if m['name'] != name]
         self._update_model_overlays()
 

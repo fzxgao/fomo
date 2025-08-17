@@ -137,6 +137,8 @@ class PickingModeHandler:
         if hasattr(self.viewer, "_update_status"):
             try:
                 self.viewer._update_status()
+                if hasattr(self.viewer.lbl, "adjustSize"):
+                    self.viewer.lbl.adjustSize()
             except Exception:
                 pass
 
@@ -150,6 +152,11 @@ class PickingModeHandler:
         # Ensure normal view is restored/redrawn
         if hasattr(self.viewer, "_refresh_views"):
             self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)
+            if hasattr(self.viewer.lbl, "adjustSize"):
+                try:
+                    self.viewer.lbl.adjustSize()
+                except Exception:
+                    pass
 
         # Hide side panel and restore original window geometry
         try:
@@ -648,6 +655,11 @@ class PickingModeHandler:
                     self._remove_status_tag(" | Points exported")
                     if self._active:
                         self._append_status(" | PICKING MODE ACTIVATED")
+                    if hasattr(self.viewer, "lbl") and hasattr(self.viewer.lbl, "adjustSize"):
+                        try:
+                            self.viewer.lbl.adjustSize()
+                        except Exception:
+                            pass
 
                 QtCore.QTimer.singleShot(2000, _restore_export_status)
         except Exception:

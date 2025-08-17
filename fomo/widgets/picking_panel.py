@@ -62,21 +62,10 @@ class PickingSidePanel(QtWidgets.QSplitter):
         self.subunits_dphi.setValue(20)
         form.addRow("Subunits dphi (in degrees, 1/3 to 1/2 of the Helical twist, if known)", self.subunits_dphi)
         self.box_size = QtWidgets.QDoubleSpinBox()
+        self.box_size.setValue(40)
         form.addRow("Box size (in pixels)", self.box_size)
-        self.extract_btn = QtWidgets.QPushButton("Extract particles")
-        self.extract_btn.setEnabled(False)
-        form.addRow(self.extract_btn)
         v.addLayout(form)
         self.addWidget(params_widget)
-
-        # Disable extract button when there are no models
-        m = self.model_list.model()
-        m.rowsInserted.connect(self._update_extract_state)
-        m.rowsRemoved.connect(self._update_extract_state)
-        self._update_extract_state()
-
-    def _update_extract_state(self):
-        self.extract_btn.setEnabled(self.model_list.count() > 0)
 
     def wheelEvent(self, event):
         """

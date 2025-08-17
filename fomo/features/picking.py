@@ -4,6 +4,8 @@ import numpy as np
 from pathlib import Path
 import re
 
+from .realtime_extraction import extract_particles_on_exit
+
 # Distance in pixels at which annotations become fully transparent.
 FADE_DIST = 10
 
@@ -101,6 +103,7 @@ class PickingModeHandler:
         self._active = False
         self._points.clear()
         self.finish_plane()
+        extract_particles_on_exit(self.viewer)
 
         self.cleanup_empty_model_dirs()
 

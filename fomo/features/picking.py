@@ -28,7 +28,9 @@ class PickingModeHandler:
         self._plane_half_w = 0
         self._plane_height = 0
         self._plane_b = None
-        self._window_width = None
+        # Save original viewer geometry when entering picking mode so we can
+        # restore it exactly on exit without incremental growth.
+        self._window_geometry = None
         # Plane editing state
         self._plane_editing = False
         self._plane_marker_items = []
@@ -67,11 +69,14 @@ class PickingModeHandler:
 
         # Show side panel and expand window width by 25%
         try:
-            self._window_width = self.viewer.width()
-            side_w = int(self._window_width * 0.25)
+            # Store the full geometry so the window can be restored precisely.
+            self._window_geometry = self.viewer.geometry()
+            w = self._window_geometry.width()
+            h = self._window_geometry.height()
+            side_w = int(w * 0.25)
             self.viewer.picking_panel.setFixedWidth(side_w)
             self.viewer.picking_panel.setVisible(True)
-            self.viewer.resize(self._window_width + side_w*3, self.viewer.height())
+            self.viewer.resize(w + side_w * 3, h)
         except Exception:
             pass
 
@@ -131,17 +136,16 @@ class PickingModeHandler:
         if hasattr(self.viewer, "_refresh_views"):
             self.viewer._refresh_views(delayed_xz=self.viewer.xz_visible)
 
-        # Hide side panel and restore window width
+        # Hide side panel and restore original window geometry
         try:
-            if self._window_width is not None:
+            if self._window_geometry is not None:
                 self.viewer.picking_panel.setVisible(False)
                 self.viewer.picking_panel.setFixedWidth(0)
-                self.viewer.resize(self._window_width, self.viewer.height())
-                # force the layout to recompute so the window shrinks back
-                self.viewer.updateGeometry()
+                # Restore the exact geometry captured on entry
+                self.viewer.setGeometry(self._window_geometry)
         except Exception:
             pass
-        self._window_width = None
+        self._window_geometry = None
 
     def add_point_under_cursor(self):
         """Add a pick at current cursor position on the XY view."""

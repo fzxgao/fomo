@@ -36,6 +36,8 @@ class PickingModeHandler:
         self._editing_paths = None  # (raw_path, xyz_path) when editing existing filaments
         self._drag_index = None
         self._dragging = False
+        # Track whether the current drag target was an existing point or a new one
+        self._drag_existing = False
 
     # -------- Public API --------
     def is_active(self):
@@ -135,6 +137,8 @@ class PickingModeHandler:
                 self.viewer.picking_panel.setVisible(False)
                 self.viewer.picking_panel.setFixedWidth(0)
                 self.viewer.resize(self._window_width, self.viewer.height())
+                # force the layout to recompute so the window shrinks back
+                self.viewer.updateGeometry()
         except Exception:
             pass
         self._window_width = None
@@ -394,12 +398,14 @@ class PickingModeHandler:
         if idx is not None:
             self._drag_index = idx
             self._dragging = False
+            self._drag_existing = True
         else:
             self._plane_points_world.append(tuple(float(c) for c in world_pos))
             self._redraw_plane_annotations()
             self._drag_index = len(self._plane_points_world) - 1
             self._dragging = False
             wx, wy, wz = world_pos
+            self._drag_existing = False
             print(f"X={int(round(wx))} Y={int(round(wy))} Z={int(round(wz))}")
 
     def move_plane_marker(self, x, y):
@@ -413,14 +419,16 @@ class PickingModeHandler:
     def release_plane_marker(self):
         if not self._plane_editing:
             return
-        if self._drag_index is not None and not self._dragging:
-            try:
-                self._plane_points_world.pop(self._drag_index)
-            except Exception:
-                pass
-            self._redraw_plane_annotations()
+        if self._drag_index is not None:
+            if self._drag_existing and not self._dragging:
+                try:
+                    self._plane_points_world.pop(self._drag_index)
+                except Exception:
+                    pass
+                self._redraw_plane_annotations()
         self._drag_index = None
         self._dragging = False
+        self._drag_existing = False
 
     def _extract_particles(self, points, overwrite_tbl: Path = None):
         panel = getattr(self.viewer, "picking_panel", None)

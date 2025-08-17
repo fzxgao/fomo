@@ -122,8 +122,23 @@ class PickingModeHandler:
         if hasattr(self.viewer, "disable_file_switching"):
             self.viewer.disable_file_switching(False)
 
-        # Clean up status tag
+        # Clean up status tags and reset status label
+        #
+        # When particles are picked or positions edited, ``finish_plane``
+        # appends a " | Points exported" message to the main status label.
+        # The label grows with every picking session which in turn expands
+        # the window's minimum width.  Subsequent calls to ``enter`` capture
+        # this wider geometry causing the window to grow on every
+        # enter/exit cycle.  Remove any transient status messages and reset
+        # the label before restoring the original geometry so that the
+        # window size remains stable.
         self._remove_status_tag(" | PICKING MODE ACTIVATED")
+        self._remove_status_tag(" | Points exported")
+        if hasattr(self.viewer, "_update_status"):
+            try:
+                self.viewer._update_status()
+            except Exception:
+                pass
 
         # Remove any marker that might remain from picking
         if hasattr(self.viewer, "clear_marker_xy"):

@@ -181,6 +181,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.lbl = StatusLabel(lambda: self.files[self.idx])
         v.addWidget(self.lbl)
         self.picking_panel.model_list.modelActivated.connect(self.activate_model)
+        self.picking_panel.model_list.modelDeleted.connect(self.delete_model)
 
         self.splitter.splitterMoved.connect(lambda *_: self._fit_views_only())
         self.top_split.splitterMoved.connect(lambda *_: self._fit_views_only())
@@ -574,6 +575,19 @@ class TomoViewer(QtWidgets.QWidget):
                 return
         self.models.append({'name': name, 'points': pts, 'path': path})
         self.picking_panel.model_list.addItem(name)
+        self._update_model_overlays()
+
+    def delete_model(self, name: str):
+        model = next((m for m in self.models if m['name'] == name), None)
+        if model is None:
+            return
+        path = model.get('path')
+        try:
+            path.unlink()
+        except Exception as e:
+            if self._verbose:
+                print(f"[models] failed to delete {name}: {e}")
+        self.models = [m for m in self.models if m['name'] != name]
         self._update_model_overlays()
 
     def _update_model_overlays(self):

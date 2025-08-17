@@ -4,6 +4,7 @@ from PyQt5 import QtCore, QtWidgets
 class ModelListWidget(QtWidgets.QListWidget):
     """List widget that allows deleting models with Del key and activating on double click."""
     modelActivated = QtCore.pyqtSignal(str)
+    modelDeleted = QtCore.pyqtSignal(str)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -14,9 +15,12 @@ class ModelListWidget(QtWidgets.QListWidget):
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Delete:
-            for item in self.selectedItems():
+            items = list(self.selectedItems())
+            for item in items:
+                name = item.text()
                 row = self.row(item)
                 self.takeItem(row)
+                self.modelDeleted.emit(name)
             event.accept()
         else:
             super().keyPressEvent(event)

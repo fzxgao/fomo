@@ -2,24 +2,18 @@ import re
 from pathlib import Path
 
 import numpy as np
+from emfile import write as write_em
 
 
 def _write_em(volume: np.ndarray, path: Path) -> None:
     """Write a 3D numpy array to EM format.
 
-    The EM header consists of 256 32-bit integers.  The first three entries
-    store the X, Y, Z dimensions; the fourth encodes the data type (5 for
-    float32).  Remaining bytes are unused.
+    The ``emfile`` package handles writing the appropriate 512 byte header
+    (including dimensions and data type) followed by the raw ``float32``
+    volume data.
     """
     volume = np.asarray(volume, dtype=np.float32)
-    header = np.zeros(256, dtype=np.int32)
-    header[0] = volume.shape[2]
-    header[1] = volume.shape[1]
-    header[2] = volume.shape[0]
-    header[3] = 5  # float32
-    with open(path, "wb") as f:
-        header.tofile(f)
-        volume.tofile(f)
+    write_em(path, volume, overwrite=True)
 
 
 def extract_particles_on_exit(viewer) -> None:

@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=1.23",
   "mrcfile>=1.4",
   "PyQt5>=5.15",
+  "emfile>=0.3",
 ]
 license = {text = "MIT"}
 authors = [{name="Your Name", email="you@example.com"}]

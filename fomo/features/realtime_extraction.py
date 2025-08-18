@@ -47,6 +47,17 @@ def extract_particles_on_exit(viewer) -> None:
         return
 
     particles_dir = volume_dir / f"particles_volume_{tomogram_number}_{tomogram_name}"
+    # Clean any existing particles/crop file so indices remain consistent
+    if particles_dir.exists():
+        for em in particles_dir.glob("particle_*.em"):
+            try:
+                em.unlink()
+            except Exception:
+                pass
+        try:
+            (particles_dir / "crop.tbl").unlink()
+        except Exception:
+            pass
     particles_dir.mkdir(parents=True, exist_ok=True)
 
     volume = viewer.mrc_handles[viewer.idx].data  # (Z, Y, X)
@@ -87,8 +98,10 @@ def extract_particles_on_exit(viewer) -> None:
                     continue
                 subvol = volume[zmin:zmax, ymin:ymax, xmin:xmax]
                 _write_em(subvol, particles_dir / f"particle_{particle_idx:06d}.em")
+                # Renumber first column sequentially across merged files
+                cols[0] = str(particle_idx)
+                merged_lines.append(" ".join(cols))
                 particle_idx += 1
-                merged_lines.append(line)
 
     if merged_lines:
         with (particles_dir / "crop.tbl").open("w") as out:

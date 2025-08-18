@@ -17,6 +17,7 @@ from fomo.widgets.slice_view import SliceView
 from fomo.widgets.histogram import HistogramWidget
 from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
+from fomo.features.realtime_extraction import extract_particles_on_exit
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -603,7 +604,13 @@ class TomoViewer(QtWidgets.QWidget):
         self.models = [m for m in self.models if m['name'] != name]
         self._update_model_overlays()
         self.picking_handler.cleanup_empty_model_dirs()
-
+        # Regenerate particles and crop.tbl after model deletion
+        try:
+            extract_particles_on_exit(self)
+        except Exception as e:
+            if self._verbose:
+                print(f"[models] failed to update particles after deleting {name}: {e}")
+                
     def _update_model_overlays(self):
         scene = self.view_xy.scene()
         for items in self._model_items:

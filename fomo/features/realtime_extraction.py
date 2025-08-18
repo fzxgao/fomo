@@ -54,7 +54,9 @@ def extract_particles_on_exit(viewer) -> None:
     particle_idx = 1
     merged_lines = []
 
-    for tbl in sorted(volume_dir.glob("raw_*.tbl")):
+    # Search recursively for raw.tbl files produced for each model
+    # and merge all coordinates that fall within the tomogram bounds.
+    for tbl in sorted(volume_dir.rglob("raw*.tbl")):
         with tbl.open() as fh:
             for line in fh:
                 line = line.rstrip("\n")

@@ -86,6 +86,10 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
 
     tomo_numbers = np.array(tomos, dtype=int)
     xyz = np.array(xyz, dtype=float)
+    if verbose:
+        print(f"XYZ is ", xyz)
+        for axiscoord in xyz:
+            print(f"Axis coord: {axiscoord}")
     shifts = np.array(shifts, dtype=float)
     eulers = np.array(eulers, dtype=float)
     mod_xyz = xyz + shifts
@@ -98,16 +102,12 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
                 break
         if volume_dir is None:
             continue
-        if verbose:
-            print(f"[refined] processing {volume_dir}")
         idx = np.where(tomo_numbers == tomo)[0]
         vol_rows = np.hstack((xyz[idx], mod_xyz[idx], eulers[idx]))
         out_csv = volume_dir / f"refined_volume_{tomo}_xyz_abg.csv"
         np.savetxt(out_csv, vol_rows, fmt="%.6f", delimiter=",")
-        if verbose:
-            print(f"[refined] wrote {out_csv}")
 
-        # Map original coords to filament numbers
+        # Map original coords to filament numbers using nested lookups
         mapping = {}
         for xyz_file in volume_dir.glob("xyz_*.csv"):
             filament = xyz_file.stem.split("_")[-1]
@@ -120,19 +120,25 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
                 pts = np.loadtxt(xyz_file)
             pts = np.atleast_2d(pts)[:, :3]
             for p in pts:
-                key = tuple(_normalize_coord(c) for c in p)
-                mapping[key] = filament
+                x_key, y_key, z_key = (_normalize_coord(c) for c in p)
+                mapping.setdefault(x_key, {}).setdefault(y_key, {})[z_key] = filament
 
         per_filament = {}
         for i in idx:
-            key = tuple(_normalize_coord(c) for c in xyz[i])
-            filament = mapping.get(key)
+            x_key, y_key, z_key = (_normalize_coord(c) for c in xyz[i])
+            filament = (
+                mapping.get(x_key, {})
+                .get(y_key, {})
+                .get(z_key)
+            )
             if filament is None:
                 if verbose:
-                    print(f"[refined] no match for {key}")
+                    print(f"[refined] no match for {(x_key, y_key, z_key)}")
                 continue
             if verbose:
-                print(f"[refined] matched {key} to filament {filament}")
+                print(
+                    f"[refined] matched {(x_key, y_key, z_key)} to filament {filament}"
+                )
             per_filament.setdefault(filament, []).append(
                 np.concatenate((xyz[i], mod_xyz[i], eulers[i]))
             )

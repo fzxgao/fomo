@@ -3,7 +3,16 @@ from pathlib import Path
 from typing import Tuple
 
 
-def import_refined_coordinates(input_dir: str) -> Tuple[Path, Path]:
+def _normalize_coord(val: float) -> float:
+    """Round and strip insignificant zeros from a coordinate value."""
+    val = round(float(val), 3)
+    if abs(val) < 1e-6:
+        return 0.0
+    if abs(val - round(val)) < 1e-6:
+        return float(int(round(val)))
+    return val
+
+def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[Path, Path]:
     """Parse a Dynamo catalogue and generate refined coordinate CSV files.
 
     Parameters
@@ -89,15 +98,21 @@ def import_refined_coordinates(input_dir: str) -> Tuple[Path, Path]:
                 break
         if volume_dir is None:
             continue
+        if verbose:
+            print(f"[refined] processing {volume_dir}")
         idx = np.where(tomo_numbers == tomo)[0]
         vol_rows = np.hstack((xyz[idx], mod_xyz[idx], eulers[idx]))
         out_csv = volume_dir / f"refined_volume_{tomo}_xyz_abg.csv"
         np.savetxt(out_csv, vol_rows, fmt="%.6f", delimiter=",")
+        if verbose:
+            print(f"[refined] wrote {out_csv}")
 
         # Map original coords to filament numbers
         mapping = {}
         for xyz_file in volume_dir.glob("xyz_*.csv"):
             filament = xyz_file.stem.split("_")[-1]
+            if verbose:
+                print(f"[refined] scanning {xyz_file}")
             try:
                 pts = np.loadtxt(xyz_file, delimiter=",")
             except Exception:
@@ -105,14 +120,19 @@ def import_refined_coordinates(input_dir: str) -> Tuple[Path, Path]:
                 pts = np.loadtxt(xyz_file)
             pts = np.atleast_2d(pts)[:, :3]
             for p in pts:
-                mapping[tuple(np.round(p, 3))] = filament
+                key = tuple(_normalize_coord(c) for c in p)
+                mapping[key] = filament
 
         per_filament = {}
         for i in idx:
-            key = tuple(np.round(xyz[i], 3))
+            key = tuple(_normalize_coord(c) for c in xyz[i])
             filament = mapping.get(key)
             if filament is None:
+                if verbose:
+                    print(f"[refined] no match for {key}")
                 continue
+            if verbose:
+                print(f"[refined] matched {key} to filament {filament}")
             per_filament.setdefault(filament, []).append(
                 np.concatenate((xyz[i], mod_xyz[i], eulers[i]))
             )

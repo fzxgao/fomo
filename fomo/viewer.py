@@ -753,7 +753,7 @@ class TomoViewer(QtWidgets.QWidget):
     def _import_refined(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue"
         try:
-            import_refined_coordinates(catalogue)
+            import_refined_coordinates(catalogue, verbose=self._verbose)
             self._load_refined_models_for_file()
         except Exception as e:
             if self._verbose:

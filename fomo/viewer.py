@@ -19,7 +19,7 @@ from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
-from fomo.features.refined_import import import_refined_coordinates, euler_to_vector
+from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -671,36 +671,39 @@ class TomoViewer(QtWidgets.QWidget):
                 line = scene.addLine(x1, y1, x2, y2, pen)
                 items.append(line)
             if vecs is not None:
-                for (x, y, z), v in zip(pts, vecs):
+               for (x, y, z), vpair in zip(pts, vecs):
                     dist = abs(z - self.z)
                     if dist > fade_dist:
                         continue
                     alpha = max(0.0, 1.0 - dist / fade_dist)
-                    color = QtGui.QColor(255, 0, 0, int(alpha * 255))
-                    pen = QtGui.QPen(color)
-                    pen.setWidth(2)
-                    pen.setCosmetic(True)
-                    vx, vy = float(v[0]), float(v[1])
-                    norm = math.hypot(vx, vy)
-                    if norm == 0:
-                        continue
-                    vx /= norm
-                    vy /= norm
-                    length = 10.0
-                    x2 = x + length * vx
-                    y2 = y + length * vy
-                    line = scene.addLine(x, y, x2, y2, pen)
-                    items.append(line)
-                    head = 4.0
-                    ang = math.atan2(vy, vx)
-                    left = ang + math.pi * 3.0 / 4.0
-                    right = ang - math.pi * 3.0 / 4.0
-                    x3 = x2 + head * math.cos(left)
-                    y3 = y2 + head * math.sin(left)
-                    x4 = x2 + head * math.cos(right)
-                    y4 = y2 + head * math.sin(right)
-                    items.append(scene.addLine(x2, y2, x3, y3, pen))
-                    items.append(scene.addLine(x2, y2, x4, y4, pen))
+                    for vec, color in [
+                        (vpair[0], QtGui.QColor(0, 0, 255, int(alpha * 255))),
+                        (vpair[1], QtGui.QColor(255, 0, 0, int(alpha * 255))),
+                    ]:
+                        pen = QtGui.QPen(color)
+                        pen.setWidth(2)
+                        pen.setCosmetic(True)
+                        vx, vy = float(vec[0]), float(vec[1])
+                        norm = math.hypot(vx, vy)
+                        if norm == 0:
+                            continue
+                        vx /= norm
+                        vy /= norm
+                        length = 10.0
+                        x2 = x + length * vx
+                        y2 = y + length * vy
+                        line = scene.addLine(x, y, x2, y2, pen)
+                        items.append(line)
+                        head = 4.0
+                        ang = math.atan2(vy, vx)
+                        left = ang + math.pi * 3.0 / 4.0
+                        right = ang - math.pi * 3.0 / 4.0
+                        x3 = x2 + head * math.cos(left)
+                        y3 = y2 + head * math.sin(left)
+                        x4 = x2 + head * math.cos(right)
+                        y4 = y2 + head * math.sin(right)
+                        items.append(scene.addLine(x2, y2, x3, y3, pen))
+                        items.append(scene.addLine(x2, y2, x4, y4, pen))
             self._model_items.append(items)
 
     def _load_models_for_file(self, idx):
@@ -745,7 +748,8 @@ class TomoViewer(QtWidgets.QWidget):
                     continue
                 pts = arr[:, 3:6]
                 eulers = arr[:, 6:9]
-                vecs = np.array([euler_to_vector(*ang) for ang in eulers])
+                x_vecs, z_vecs = zip(*(euler_to_vectors(*ang) for ang in eulers))
+                vecs = np.stack((x_vecs, z_vecs), axis=1)
                 self.add_model(rcsv, pts, vecs)
             except Exception:
                 continue

@@ -1,4 +1,5 @@
 import numpy as np
+import re
 from pathlib import Path
 from typing import Tuple
 
@@ -80,7 +81,7 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
                 # Skip malformed rows rather than failing the entire import
                 continue
             tomos.append(tomo)
-            xyz.append((x, y, z))
+            xyz.append([x, y, z])
             shifts.append((dx, dy, dz))
             eulers.append((tdrot, tilt, narot))
 
@@ -107,21 +108,27 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
         out_csv = volume_dir / f"refined_volume_{tomo}_xyz_abg.csv"
         np.savetxt(out_csv, vol_rows, fmt="%.6f", delimiter=",")
 
-        # Map original coords to filament numbers using nested lookups
+        # Map original coords from raw_*.tbl to filament numbers using nested lookups
         mapping = {}
-        for xyz_file in volume_dir.glob("xyz_*.csv"):
-            filament = xyz_file.stem.split("_")[-1]
+        for raw_file in volume_dir.glob("raw_*.tbl"):
+            m = re.match(r"raw_(\d+)\.tbl", raw_file.name)
+            if not m:
+                continue
+            filament = m.group(1)
             if verbose:
-                print(f"[refined] scanning {xyz_file}")
-            try:
-                pts = np.loadtxt(xyz_file, delimiter=",")
-            except Exception:
-                # Some xyz files are whitespace-delimited; fall back gracefully
-                pts = np.loadtxt(xyz_file)
-            pts = np.atleast_2d(pts)[:, :3]
-            for p in pts:
-                x_key, y_key, z_key = (_normalize_coord(c) for c in p)
-                mapping.setdefault(x_key, {}).setdefault(y_key, {})[z_key] = filament
+                print(f"[refined] scanning {raw_file}")
+            with open(raw_file) as rf:
+                for line in rf:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.split()
+                    try:
+                        x, y, z = map(float, parts[23:26])
+                    except (ValueError, IndexError):
+                        continue
+                    x_key, y_key, z_key = (_normalize_coord(c) for c in (x, y, z))
+                    mapping.setdefault(x_key, {}).setdefault(y_key, {})[z_key] = filament
 
         per_filament = {}
         for i in idx:
@@ -149,11 +156,9 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
     return path_to_tomograms, path_to_refined_tbl
 
 
-def euler_to_vector(tdrot: float, tilt: float, narot: float) -> np.ndarray:
-    """Return orientation vector of the new z-axis for given Euler angles."""
-    rtd = np.deg2rad(tdrot)
-    rtilt = np.deg2rad(tilt)
-    rnar = np.deg2rad(narot)
+def euler_to_vectors(tdrot: float, tilt: float, narot: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return rotated x- and z-axis unit vectors for given Euler angles."""
+    rtd, rtilt, rnar = np.deg2rad([tdrot, tilt, narot])
     rz1 = np.array([[np.cos(rtd), -np.sin(rtd), 0],
                     [np.sin(rtd),  np.cos(rtd), 0],
                     [0,            0,           1]])
@@ -164,5 +169,6 @@ def euler_to_vector(tdrot: float, tilt: float, narot: float) -> np.ndarray:
                     [np.sin(rnar),  np.cos(rnar), 0],
                     [0,            0,           1]])
     R = rz2 @ rx @ rz1
-    vec = R @ np.array([0.0, 0.0, 1.0])
-    return vec
+    x_vec = R @ np.array([1.0, 0.0, 0.0])
+    z_vec = R @ np.array([0.0, 0.0, 1.0])
+    return x_vec, z_vec

@@ -72,6 +72,12 @@ class PickingModeHandler:
         except Exception:
             pass
 
+        if hasattr(self.viewer, "_load_refined_models_for_file"):
+            try:
+                self.viewer._load_refined_models_for_file()
+            except Exception:
+                pass
+
         # Hide any existing crosshair when picking
         if hasattr(self.viewer, "_hide_crosshair"):
             self.viewer._hide_crosshair()

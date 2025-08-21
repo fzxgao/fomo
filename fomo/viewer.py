@@ -19,6 +19,7 @@ from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
+from fomo.features.refined_import import import_refined_coordinates, euler_to_vector
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -113,8 +114,8 @@ class TomoViewer(QtWidgets.QWidget):
         # Picking mode handler
         self.picking_handler = PickingModeHandler(self)
 
-        # Model overlays (smoothed filaments)
-        self.models = []  # [{'name': str, 'points': np.ndarray}]
+        # Model overlays (smoothed filaments and refined points)
+        self.models = []  # [{'name': str, 'points': np.ndarray, 'path': Path, 'vectors': np.ndarray | None}]
         self._model_items = []
 
         # Preload metadata before building UI
@@ -155,6 +156,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.side_panel.setFixedWidth(330)
         self.side_panel.setCurrentWidget(self.refinement_panel)
         h.addWidget(self.side_panel)
+        self.refinement_panel.import_btn.clicked.connect(self._import_refined)
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         v.addWidget(self.splitter, 1)
@@ -545,6 +547,8 @@ class TomoViewer(QtWidgets.QWidget):
         if model is None:
             return
         raw_path = model.get('path')
+        if raw_path is None or raw_path.suffix != '.tbl':
+            return
         xyz_path = raw_path.with_name(raw_path.name.replace("raw_", "xyz_").replace(".tbl", ".csv"))
         if not xyz_path.exists():
             if self._verbose:
@@ -583,17 +587,21 @@ class TomoViewer(QtWidgets.QWidget):
         self.models.clear()
         self.picking_panel.model_list.clear()
 
-    def add_model(self, tbl_path, points):
-        path = Path(tbl_path)
-        name = path.name
+    def add_model(self, tbl_path, points, vectors=None):
+        path = Path(tbl_path) if tbl_path is not None else None
+        name = path.name if path is not None else "model"
         pts = np.array(points, dtype=np.float32)
+        vecs = None
+        if vectors is not None:
+            vecs = np.array(vectors, dtype=np.float32)
         for model in self.models:
             if model['name'] == name:
                 model['points'] = pts
                 model['path'] = path
+                model['vectors'] = vecs
                 self._update_model_overlays()
                 return
-        self.models.append({'name': name, 'points': pts, 'path': path})
+        self.models.append({'name': name, 'points': pts, 'path': path, 'vectors': vecs})
         self.picking_panel.model_list.addItem(name)
         self._update_model_overlays()
 
@@ -602,22 +610,26 @@ class TomoViewer(QtWidgets.QWidget):
         if model is None:
             return
         path = model.get('path')
-        # The raw_*.tbl files have a matching xyz_*.csv with the same stem.
-        # When removing a model we want to tidy up both files.
-        xyz_path = path.with_name(path.name.replace("raw_", "xyz_").replace(".tbl", ".csv"))
-        try:
-            path.unlink()
-        except Exception as e:
-            if self._verbose:
-                print(f"[models] failed to delete {name}: {e}")
-        try:
-            xyz_path.unlink()
-        except FileNotFoundError:
-            # It's fine if the xyz csv does not exist.
-            pass
-        except Exception as e:
-            if self._verbose:
-                print(f"[models] failed to delete xyz for {name}: {e}")
+        if path is not None and path.suffix == '.tbl':
+            xyz_path = path.with_name(path.name.replace("raw_", "xyz_").replace(".tbl", ".csv"))
+            try:
+                path.unlink()
+            except Exception as e:
+                if self._verbose:
+                    print(f"[models] failed to delete {name}: {e}")
+            try:
+                xyz_path.unlink()
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                if self._verbose:
+                    print(f"[models] failed to delete xyz for {name}: {e}")
+        elif path is not None and path.suffix == '.csv':
+            try:
+                path.unlink()
+            except Exception as e:
+                if self._verbose:
+                    print(f"[models] failed to delete {name}: {e}")
         self.models = [m for m in self.models if m['name'] != name]
         self._update_model_overlays()
         self.picking_handler.cleanup_empty_model_dirs()
@@ -640,6 +652,7 @@ class TomoViewer(QtWidgets.QWidget):
         fade_dist = FADE_DIST
         for model in self.models:
             pts = model['points']
+            vecs = model.get('vectors')
             items = []
             for (x1, y1, z1), (x2, y2, z2) in zip(pts, pts[1:]):
                 dist1 = abs(z1 - self.z)
@@ -649,12 +662,45 @@ class TomoViewer(QtWidgets.QWidget):
                 alpha1 = max(0.0, 1.0 - dist1 / fade_dist)
                 alpha2 = max(0.0, 1.0 - dist2 / fade_dist)
                 alpha = (alpha1 + alpha2) / 2.0
-                color = QtGui.QColor(0, 255, 0, int(alpha * 255))
-                pen = QtGui.QPen(color)
+                color_val = QtGui.QColor(0, 255, 0, int(alpha * 255))
+                if vecs is not None:
+                    color_val = QtGui.QColor(255, 0, 0, int(alpha * 255))
+                pen = QtGui.QPen(color_val)
                 pen.setWidth(2)
                 pen.setCosmetic(True)
                 line = scene.addLine(x1, y1, x2, y2, pen)
                 items.append(line)
+            if vecs is not None:
+                for (x, y, z), v in zip(pts, vecs):
+                    dist = abs(z - self.z)
+                    if dist > fade_dist:
+                        continue
+                    alpha = max(0.0, 1.0 - dist / fade_dist)
+                    color = QtGui.QColor(255, 0, 0, int(alpha * 255))
+                    pen = QtGui.QPen(color)
+                    pen.setWidth(2)
+                    pen.setCosmetic(True)
+                    vx, vy = float(v[0]), float(v[1])
+                    norm = math.hypot(vx, vy)
+                    if norm == 0:
+                        continue
+                    vx /= norm
+                    vy /= norm
+                    length = 10.0
+                    x2 = x + length * vx
+                    y2 = y + length * vy
+                    line = scene.addLine(x, y, x2, y2, pen)
+                    items.append(line)
+                    head = 4.0
+                    ang = math.atan2(vy, vx)
+                    left = ang + math.pi * 3.0 / 4.0
+                    right = ang - math.pi * 3.0 / 4.0
+                    x3 = x2 + head * math.cos(left)
+                    y3 = y2 + head * math.sin(left)
+                    x4 = x2 + head * math.cos(right)
+                    y4 = y2 + head * math.sin(right)
+                    items.append(scene.addLine(x2, y2, x3, y3, pen))
+                    items.append(scene.addLine(x2, y2, x4, y4, pen))
             self._model_items.append(items)
 
     def _load_models_for_file(self, idx):
@@ -677,6 +723,41 @@ class TomoViewer(QtWidgets.QWidget):
             except Exception:
                 continue
             self.add_model(tbl, coords)
+
+    def _load_refined_models_for_file(self):
+        tomogram_path = Path(self.files[self.idx])
+        tomogram_name = tomogram_path.stem
+        root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not root_dir.exists():
+            return
+        target_dir = None
+        for d in root_dir.iterdir():
+            if d.is_dir() and d.name.endswith(tomogram_name):
+                target_dir = d
+                break
+        if target_dir is None:
+            return
+        for rcsv in sorted(target_dir.glob("refined_xyz_*.csv")):
+            try:
+                arr = np.loadtxt(rcsv, delimiter=",")
+                arr = np.atleast_2d(arr)
+                if arr.shape[1] < 9:
+                    continue
+                pts = arr[:, 3:6]
+                eulers = arr[:, 6:9]
+                vecs = np.array([euler_to_vector(*ang) for ang in eulers])
+                self.add_model(rcsv, pts, vecs)
+            except Exception:
+                continue
+
+    def _import_refined(self):
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue"
+        try:
+            import_refined_coordinates(catalogue)
+            self._load_refined_models_for_file()
+        except Exception as e:
+            if self._verbose:
+                print(f"[refined] import failed: {e}")
 
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):

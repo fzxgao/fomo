@@ -38,7 +38,7 @@ def main():
         scroll_mult=args.scroll_mult,
         scroll_max_streak=args.scroll_max_streak,
     )
-    w.resize(800, 850)
+    w.resize(1200, 800)
     w.show()
     sys.exit(app.exec_())
 

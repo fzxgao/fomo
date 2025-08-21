@@ -30,9 +30,6 @@ class PickingModeHandler:
         self._plane_half_w = 0
         self._plane_height = 0
         self._plane_b = None
-        # Save original viewer geometry when entering picking mode so we can
-        # restore it exactly on exit without incremental growth.
-        self._window_geometry = None
         # Plane editing state
         self._plane_editing = False
         self._plane_marker_items = []
@@ -69,16 +66,9 @@ class PickingModeHandler:
         except Exception:
             pass
 
-        # Show side panel and expand window width by 25%
+        # Show picking panel
         try:
-            # Persist full geometry so the window can be restored precisely.
-            self._window_geometry = self.viewer.saveGeometry()
-            self._window_width = self.viewer.width()
-            h = self.viewer.height()
-            side_w = int(self._window_width * 0.25)
-            self.viewer.picking_panel.setFixedWidth(side_w)
-            self.viewer.picking_panel.setVisible(True)
-            self.viewer.resize(self._window_width + side_w * 3, h)
+           self.viewer.show_picking_panel()
         except Exception:
             pass
 
@@ -162,26 +152,11 @@ class PickingModeHandler:
                 except Exception:
                     pass
 
-        # Hide side panel and restore original window geometry
+        # Restore refinement panel
         try:
-            if self._window_geometry is not None:
-                self.viewer.picking_panel.setVisible(False)
-                self.viewer.picking_panel.setFixedWidth(0)
-                # Restore the exact geometry captured on entry
-                try:
-                    self.viewer.restoreGeometry(self._window_geometry)
-                except Exception:
-                    # Fallback if restoreGeometry unavailable
-                    geom = self.viewer.geometry()
-                    self.viewer.setGeometry(geom.x(), geom.y(),
-                                            self._window_width or geom.width(),
-                                            geom.height())
-                if self._window_width is not None:
-                    self.viewer.resize(self._window_width, self.viewer.height())
+            self.viewer.show_refinement_panel()
         except Exception:
             pass
-        self._window_geometry = None
-        self._window_width = None
 
     def add_point_under_cursor(self):
         """Add a pick at current cursor position on the XY view."""

@@ -16,6 +16,7 @@ from fomo.io.mrcio import fast_header_stats
 from fomo.widgets.slice_view import SliceView
 from fomo.widgets.histogram import HistogramWidget
 from fomo.widgets.picking_panel import PickingSidePanel
+from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 
@@ -144,9 +145,16 @@ class TomoViewer(QtWidgets.QWidget):
         central = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(central)
         h.addWidget(central, 1)
+
+        # Side panel stack: refinement (default) and picking panel
+        self.side_panel = QtWidgets.QStackedWidget()
+        self.refinement_panel = RefinementSidePanel()
         self.picking_panel = PickingSidePanel()
-        self.picking_panel.setVisible(False)
-        h.addWidget(self.picking_panel)
+        self.side_panel.addWidget(self.refinement_panel)
+        self.side_panel.addWidget(self.picking_panel)
+        self.side_panel.setFixedWidth(300)
+        self.side_panel.setCurrentWidget(self.refinement_panel)
+        h.addWidget(self.side_panel)
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         v.addWidget(self.splitter, 1)
@@ -238,6 +246,15 @@ class TomoViewer(QtWidgets.QWidget):
             self.picking_handler.finish_plane,
             context=QtCore.Qt.ApplicationShortcut,
         )
+
+    def show_refinement_panel(self):
+        """Display the refinement side panel."""
+        self.side_panel.setCurrentWidget(self.refinement_panel)
+
+    def show_picking_panel(self):
+        """Display the picking side panel."""
+        self.side_panel.setCurrentWidget(self.picking_panel)
+
     # ---------- Metadata preload ----------
     def _compute_metadata(self, idx, mrc):
         data = mrc.data
@@ -610,7 +627,7 @@ class TomoViewer(QtWidgets.QWidget):
         except Exception as e:
             if self._verbose:
                 print(f"[models] failed to update particles after deleting {name}: {e}")
-                
+
     def _update_model_overlays(self):
         scene = self.view_xy.scene()
         for items in self._model_items:

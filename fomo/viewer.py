@@ -152,7 +152,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.picking_panel = PickingSidePanel()
         self.side_panel.addWidget(self.refinement_panel)
         self.side_panel.addWidget(self.picking_panel)
-        self.side_panel.setFixedWidth(300)
+        self.side_panel.setFixedWidth(330)
         self.side_panel.setCurrentWidget(self.refinement_panel)
         h.addWidget(self.side_panel)
 

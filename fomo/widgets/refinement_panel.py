@@ -86,9 +86,9 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         #13 Shift limits
         shift_widget = QtWidgets.QWidget()
         sh = QtWidgets.QHBoxLayout(shift_widget)
-        self.shift_x = QtWidgets.QSpinBox(); self.shift_x.setValue(4); self.shift_x.setMinimumWidth(60)
-        self.shift_y = QtWidgets.QSpinBox(); self.shift_y.setValue(4); self.shift_y.setMinimumWidth(60)
-        self.shift_z = QtWidgets.QSpinBox(); self.shift_z.setValue(12); self.shift_z.setMinimumWidth(60)
+        self.shift_x = QtWidgets.QSpinBox(); self.shift_x.setValue(4); self.shift_x.setMinimumWidth(30)
+        self.shift_y = QtWidgets.QSpinBox(); self.shift_y.setValue(4); self.shift_y.setMinimumWidth(30)
+        self.shift_z = QtWidgets.QSpinBox(); self.shift_z.setValue(12); self.shift_z.setMinimumWidth(30)
         sh.addWidget(self.shift_x); sh.addWidget(self.shift_y); sh.addWidget(self.shift_z)
         form.addRow("Shift limits", shift_widget)
         #14 Shift limiting way

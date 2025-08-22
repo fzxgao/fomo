@@ -129,7 +129,6 @@ class TomoViewer(QtWidgets.QWidget):
         # Preload metadata before building UI
         self._preload_metadata()
 
-
         # Build UI
         self._build_ui()
         self.top_split.installEventFilter(self)
@@ -257,6 +256,7 @@ class TomoViewer(QtWidgets.QWidget):
             self.picking_handler.finish_plane,
             context=QtCore.Qt.ApplicationShortcut,
         )
+        self._load_latest_initial_average()
 
     def show_refinement_panel(self):
         """Display the refinement side panel."""
@@ -860,6 +860,35 @@ class TomoViewer(QtWidgets.QWidget):
             if self._verbose:
                 print(f"[refined] import failed: {e}")
 
+    def _load_latest_initial_average(self):
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / "average_reference"
+        try:
+            candidates = list(catalogue.glob("**/rawTemplate.em"))
+        except Exception:
+            candidates = []
+        if not candidates:
+            return
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        try:
+            header, vol = read_em(latest)
+        except Exception as e:
+            if self._verbose:
+                print(f"[initial_avg] failed to read average: {e}")
+            return
+        self._initial_avg = vol
+        self._initial_avg_min = float(vol.min())
+        self._initial_avg_max = float(vol.max())
+        for axis, slider in enumerate(self.refinement_panel.initial_avg_sliders):
+            slider.blockSignals(True)
+            slider.setMinimum(0)
+            slider.setMaximum(vol.shape[axis] - 1)
+            slider.setValue(vol.shape[axis] // 2)
+            slider.valueChanged.connect(
+                lambda val, a=axis: self._update_initial_avg_slice(a, val)
+            )
+            slider.blockSignals(False)
+            self._update_initial_avg_slice(axis, vol.shape[axis] // 2)
+
     def _calculate_initial_average(self):
         """Run dynamo averaging on a random subset of particles."""
         catalogue = Path.cwd() / "fomo_dynamo_catalogue"
@@ -908,8 +937,17 @@ class TomoViewer(QtWidgets.QWidget):
                 print(f"[initial_avg] failed to read average: {e}")
             return
         self._initial_avg = vol
-        self._initial_avg_min = float(vol.min())
-        self._initial_avg_max = float(vol.max())
+        amin = float(vol.min())
+        amax = float(vol.max())
+        amean = float(vol.mean())
+        if amax <= amin:
+            self._initial_avg_min, self._initial_avg_max = amin, amax
+        else:
+            rng = (amax - amin) / 3.0
+            self._initial_avg_min, self._initial_avg_max = (
+                amean - rng,
+                amean + rng,
+            )
         for axis, slider in enumerate(self.refinement_panel.initial_avg_sliders):
             slider.blockSignals(True)
             slider.setMinimum(0)

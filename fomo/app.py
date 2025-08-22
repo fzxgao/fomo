@@ -4,7 +4,8 @@ import sys
 import argparse
 from PyQt5 import QtWidgets
 from .viewer import TomoViewer
-from .utils import list_mrcs
+from .io.mrcio import list_mrcs
+from .style import apply_dark_theme
 
 
 def main():
@@ -30,6 +31,7 @@ def main():
         sys.exit("No MRC files found.")
 
     app = QtWidgets.QApplication(sys.argv)
+    apply_dark_theme(app)
     w = TomoViewer(
         path,
         verbose=verbose,

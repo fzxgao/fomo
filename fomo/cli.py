@@ -2,6 +2,7 @@ import os, sys, argparse
 from PyQt5 import QtWidgets
 from .viewer import TomoViewer
 from .io.mrcio import list_mrcs
+from .style import apply_dark_theme
 
 def build_parser():
     p = argparse.ArgumentParser(description="Fast MRC viewer (fomo)")
@@ -20,6 +21,7 @@ def main(argv=None):
         sys.exit("No MRC files found.")
 
     app = QtWidgets.QApplication(sys.argv)
+    apply_dark_theme(app)
     w = TomoViewer(
         path,
         verbose=args.verbose,

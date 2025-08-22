@@ -21,7 +21,6 @@ from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
-from fomo.features import calculate_initial_average
 
 # ---------------- Utility ----------------
 def list_mrcs(path):

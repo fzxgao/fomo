@@ -4,6 +4,8 @@ from collections import OrderedDict
 import threading
 import concurrent.futures
 from pathlib import Path
+import random
+import tempfile
 
 import numpy as np
 import mrcfile
@@ -857,6 +859,84 @@ class TomoViewer(QtWidgets.QWidget):
         except Exception as e:
             if self._verbose:
                 print(f"[refined] import failed: {e}")
+
+    def _calculate_initial_average(self):
+        """Run dynamo averaging on a random subset of particles."""
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue"
+        merged_dir = catalogue / "tomograms" / "merged"
+        merged_tbl = merged_dir / "merged_crop.tbl"
+        subset_tbl = merged_dir / "subset_500_merged_crop.tbl"
+        try:
+            lines = merged_tbl.read_text().splitlines()
+        except Exception as e:
+            if self._verbose:
+                print(f"[initial_avg] failed to read table: {e}")
+            return
+        table_path = merged_tbl
+        if len(lines) >= 500:
+            sample = random.sample(lines, 500)
+            subset_tbl.write_text("\n".join(sample) + "\n")
+            table_path = subset_tbl
+
+        box_size = int(self.picking_panel.box_size.value())
+        out_dir = catalogue / "tomograms" / "alignments" / "average_reference" / str(box_size)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = out_dir / "rawTemplate.em"
+
+        script = (
+            f"oa=daverage('fomo_dynamo_catalogue/tomograms/merged','t',"\
+            f"'{table_path.as_posix()}');"\
+            f"dwrite(oa.average,'{out_file.as_posix()}');"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False) as tf:
+            tf.write(script)
+            script_path = tf.name
+
+        dyn_script = Path(__file__).resolve().parent / "dynamo_setup_EDITME.sh"
+        self._avg_process = QtCore.QProcess(self)
+        self._avg_process.finished.connect(
+            lambda *_: self._on_initial_average_finished(out_file, script_path)
+        )
+        self._avg_process.start("bash", [str(dyn_script), script_path])
+
+    def _on_initial_average_finished(self, out_file, script_path):
+        Path(script_path).unlink(missing_ok=True)
+        try:
+            vol = read_em(out_file)[0]
+        except Exception as e:
+            if self._verbose:
+                print(f"[initial_avg] failed to read average: {e}")
+            return
+        self._initial_avg = vol
+        self._initial_avg_min = float(vol.min())
+        self._initial_avg_max = float(vol.max())
+        for axis, slider in enumerate(self.refinement_panel.initial_avg_sliders):
+            slider.blockSignals(True)
+            slider.setMinimum(0)
+            slider.setMaximum(vol.shape[axis] - 1)
+            slider.setValue(vol.shape[axis] // 2)
+            slider.valueChanged.connect(
+                lambda val, a=axis: self._update_initial_avg_slice(a, val)
+            )
+            slider.blockSignals(False)
+            self._update_initial_avg_slice(axis, vol.shape[axis] // 2)
+
+    def _update_initial_avg_slice(self, axis, idx):
+        if self._initial_avg is None:
+            return
+        arr = np.take(self._initial_avg, idx, axis=axis)
+        arr = np.ascontiguousarray(arr)
+        rng = self._initial_avg_max - self._initial_avg_min
+        if rng == 0:
+            rng = 1.0
+        arr = ((arr - self._initial_avg_min) / rng * 255).clip(0, 255).astype(np.uint8)
+        h, w = arr.shape
+        qimg = QtGui.QImage(arr.data, w, h, w, QtGui.QImage.Format_Grayscale8)
+        label = self.refinement_panel.initial_avg_views[axis]
+        pix = QtGui.QPixmap.fromImage(qimg).scaled(
+            label.width(), label.height(), QtCore.Qt.KeepAspectRatio
+        )
+        label.setPixmap(pix)
 
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):

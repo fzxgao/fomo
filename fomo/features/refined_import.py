@@ -172,3 +172,41 @@ def euler_to_vectors(tdrot: float, tilt: float, narot: float) -> tuple[np.ndarra
     x_vec = R @ np.array([1.0, 0.0, 0.0])
     z_vec = R @ np.array([0.0, 0.0, 1.0])
     return x_vec, z_vec
+
+
+def plot_mod_coordinates(mod_xyz: np.ndarray, eulers: np.ndarray, arrow_length: float = 20.0) -> None:
+    """Plot modified coordinates with arrows for original and rotated Z axes.
+
+    Each point is drawn with two arrows: a blue arrow showing the direction
+    parallel to the original Z axis and a red arrow showing the direction
+    parallel to the rotated z axis derived from the provided Euler angles.
+
+    Parameters
+    ----------
+    mod_xyz : np.ndarray
+        Array of shape ``(N, 3)`` containing the modified ``x, y, z``
+        coordinates for each point.
+    eulers : np.ndarray
+        Array of shape ``(N, 3)`` containing ``(tdrot, tilt, narot)`` Euler
+        angles in degrees for each point.
+    arrow_length : float, optional
+        Length of the arrows to draw, default is ``20.0``.
+    """
+
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+
+    for (x, y, z), (tdrot, tilt, narot) in zip(mod_xyz, eulers):
+        # Original Z-axis arrow (0, 0, 1)
+        ax.quiver(x, y, z, 0, 0, arrow_length, color="b")
+
+        # Rotated z-axis arrow computed from Euler angles
+        _, z_vec = euler_to_vectors(tdrot, tilt, narot)
+        ax.quiver(x, y, z, *(arrow_length * z_vec), color="r")
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.show()

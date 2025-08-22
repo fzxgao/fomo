@@ -6,6 +6,26 @@ import re
 
 from .realtime_extraction import extract_particles_on_exit
 
+class ParticleExtractionWorker(QtCore.QObject):
+    """Background worker extracting particles and cleaning up models."""
+
+    started = QtCore.pyqtSignal()
+    finished = QtCore.pyqtSignal()
+
+    def __init__(self, viewer, cleanup_fn):
+        super().__init__()
+        self.viewer = viewer
+        self._cleanup_fn = cleanup_fn
+
+    @QtCore.pyqtSlot()
+    def run(self):
+        self.started.emit()
+        try:
+            extract_particles_on_exit(self.viewer)
+            self._cleanup_fn()
+        finally:
+            self.finished.emit()
+
 # Distance in pixels at which annotations become fully transparent.
 FADE_DIST = 10
 
@@ -39,6 +59,10 @@ class PickingModeHandler:
         self._dragging = False
         # Track whether the current drag target was an existing point or a new one
         self._drag_existing = False
+
+        # Background extraction worker/thread
+        self._extraction_worker = None
+        self._extraction_thread = None
 
     # -------- Public API --------
     def is_active(self):
@@ -99,9 +123,23 @@ class PickingModeHandler:
         self._active = False
         self._points.clear()
         self.finish_plane()
-        extract_particles_on_exit(self.viewer)
 
-        self.cleanup_empty_model_dirs()
+        # Launch background worker for particle extraction and cleanup
+        self._extraction_worker = ParticleExtractionWorker(
+            self.viewer, self.cleanup_empty_model_dirs
+        )
+        self._extraction_thread = QtCore.QThread()
+        self._extraction_worker.moveToThread(self._extraction_thread)
+        self._extraction_worker.started.connect(
+            lambda: self._append_status(" | Extracting particles...")
+        )
+        self._extraction_worker.finished.connect(self._extraction_thread.quit)
+        self._extraction_worker.finished.connect(self._extraction_worker.deleteLater)
+        self._extraction_thread.finished.connect(self._extraction_thread.deleteLater)
+        self._extraction_worker.finished.connect(self._on_extraction_finished)
+        self._extraction_thread.started.connect(self._extraction_worker.run)
+        self._extraction_thread.start()
+
 
         # Restore layout
         if self._saved_layout is not None:
@@ -119,28 +157,7 @@ class PickingModeHandler:
         # Cursor back to hand-drag
         self._set_cursor(False)
 
-        if hasattr(self.viewer, "disable_file_switching"):
-            self.viewer.disable_file_switching(False)
-
-        # Clean up status tags and reset status label
-        #
-        # When particles are picked or positions edited, ``finish_plane``
-        # appends a " | Points exported" message to the main status label.
-        # The label grows with every picking session which in turn expands
-        # the window's minimum width.  Subsequent calls to ``enter`` capture
-        # this wider geometry causing the window to grow on every
-        # enter/exit cycle.  Remove any transient status messages and reset
-        # the label before restoring the original geometry so that the
-        # window size remains stable.
-        self._remove_status_tag(" | PICKING MODE ACTIVATED")
-        self._remove_status_tag(" | Points exported")
-        if hasattr(self.viewer, "_update_status"):
-            try:
-                self.viewer._update_status()
-                if hasattr(self.viewer.lbl, "adjustSize"):
-                    self.viewer.lbl.adjustSize()
-            except Exception:
-                pass
+        # Final UI cleanup and status updates occur after extraction finishes
 
         # Remove any marker that might remain from picking
         if hasattr(self.viewer, "clear_marker_xy"):
@@ -223,6 +240,23 @@ class PickingModeHandler:
             self.viewer.lbl.setText(self.viewer.lbl.text().replace(tag, ""))
         except Exception:
             pass
+        
+    def _on_extraction_finished(self):
+        """Handle UI updates after background extraction completes."""
+        self._remove_status_tag(" | Extracting particles...")
+        self._remove_status_tag(" | PICKING MODE ACTIVATED")
+        self._remove_status_tag(" | Points exported")
+        if hasattr(self.viewer, "disable_file_switching"):
+            self.viewer.disable_file_switching(False)
+        if hasattr(self.viewer, "_update_status"):
+            try:
+                self.viewer._update_status()
+                if hasattr(self.viewer.lbl, "adjustSize"):
+                    self.viewer.lbl.adjustSize()
+            except Exception:
+                pass
+        self._extraction_worker = None
+        self._extraction_thread = None
 
     def cleanup_empty_model_dirs(self):
         """Remove empty volume directories for the current tomogram."""

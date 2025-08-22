@@ -356,6 +356,11 @@ class PickingModeHandler:
         self.viewer.view_xy.dynamic_fit = True
         self.viewer.view_xy.fit_height()
         self._redraw_plane_annotations()
+        if hasattr(self.viewer, "_update_model_overlays"):
+            try:
+                self.viewer._update_model_overlays()
+            except Exception:
+                pass
     # ----- Plane annotation helpers -----
     def is_plane_editing(self):
         return self._plane_editing

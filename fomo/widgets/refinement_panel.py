@@ -17,6 +17,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         v.addWidget(QtWidgets.QLabel("Initial averaging"))
         hl = QtWidgets.QHBoxLayout()
         self.initial_avg_views = []
+        self.initial_avg_sliders = []
         for axis in ("X", "Y", "Z"):
             vb = QtWidgets.QVBoxLayout()
             label = QtWidgets.QLabel(f"{axis}")
@@ -26,6 +27,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
             self.initial_avg_views.append(label)
             vb.addWidget(label)
             slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            self.initial_avg_sliders.append(slider)
             vb.addWidget(slider)
             hl.addLayout(vb)
         v.addLayout(hl)

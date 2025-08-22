@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import mrcfile
+from emfile import read as read_em
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 # Import features from other modules
@@ -19,7 +20,8 @@ from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
-from fomo.features.refined_import import import_refined_coordinates,  tilt_to_z_vectors
+from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
+from fomo.features import calculate_initial_average
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -118,6 +120,11 @@ class TomoViewer(QtWidgets.QWidget):
         self.models = []  # [{'name': str, 'points': np.ndarray, 'path': Path, 'vectors': np.ndarray | None}]
         self._model_items = []
 
+        # Initial average volume and statistics
+        self._initial_avg = None
+        self._initial_avg_min = None
+        self._initial_avg_max = None
+
         # Preload metadata before building UI
         self._preload_metadata()
 
@@ -157,6 +164,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.side_panel.setCurrentWidget(self.refinement_panel)
         h.addWidget(self.side_panel)
         self.refinement_panel.import_btn.clicked.connect(self._import_refined)
+        self.refinement_panel.calc_initial_btn.clicked.connect(self._calculate_initial_average)
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         v.addWidget(self.splitter, 1)
@@ -650,66 +658,149 @@ class TomoViewer(QtWidgets.QWidget):
                     pass
         self._model_items = []
         fade_dist = FADE_DIST
+
+
+        picking = self.picking_handler
+        use_plane = (
+            picking.is_active()
+            and picking.has_plane()
+            and getattr(picking, "_plane_origin", None) is not None
+        )
+        origin = getattr(picking, "_plane_origin", None)
+        ax = getattr(picking, "_plane_a", None)
+        ay = getattr(picking, "_plane_v", None)
+        bn = getattr(picking, "_plane_b", None)
+
         for model in self.models:
             pts = model['points']
             vecs = model.get('vectors')
             items = []
-            for (x1, y1, z1), (x2, y2, z2) in zip(pts, pts[1:]):
-                dist1 = abs(z1 - self.z)
-                dist2 = abs(z2 - self.z)
-                if dist1 > fade_dist and dist2 > fade_dist:
-                    continue
-                alpha1 = max(0.0, 1.0 - dist1 / fade_dist)
-                alpha2 = max(0.0, 1.0 - dist2 / fade_dist)
-                alpha = (alpha1 + alpha2) / 2.0
-                color_val = QtGui.QColor(0, 255, 0, int(alpha * 255))
-                if vecs is not None:
-                    color_val = QtGui.QColor(255, 0, 0, int(alpha * 255))
-                pen = QtGui.QPen(color_val)
-                pen.setWidth(2)
-                pen.setCosmetic(True)
-                line = scene.addLine(x1, y1, x2, y2, pen)
-                items.append(line)
-            if vecs is not None:
-               for (x, y, z), vpair in zip(pts, vecs):
-                    dist = abs(z - self.z)
+            if use_plane:
+                projected = []
+                for x, y, z in pts:
+                    vec = np.array([x, y, z], dtype=np.float32) - origin
+                    dist = abs(float(np.dot(vec, bn))) if bn is not None else 0.0
                     if dist > fade_dist:
+                        projected.append(None)
                         continue
                     alpha = max(0.0, 1.0 - dist / fade_dist)
-                    for vec, color in [
-                        (vpair[0], QtGui.QColor(0, 0, 255, int(alpha * 255))),
-                        (vpair[1], QtGui.QColor(255, 0, 0, int(alpha * 255))),
-                    ]:
-                        pen = QtGui.QPen(color)
-                        pen.setWidth(2)
-                        pen.setCosmetic(True)
-                        vx, vy, vz = float(vec[0]), float(vec[1]), float(vec[2])
-                        norm = math.sqrt(vx * vx + vy * vy + vz * vz)
-                        if norm == 0:
+                    px = float(np.dot(vec, ax)) + picking._plane_half_w
+                    py = float(np.dot(vec, ay))
+                    projected.append((px, py, alpha))
+                for p1, p2 in zip(projected, projected[1:]):
+                    if p1 is None or p2 is None:
+                        continue
+                    x1, y1, a1 = p1
+                    x2, y2, a2 = p2
+                    alpha = (a1 + a2) / 2.0
+                    color_val = QtGui.QColor(0, 255, 0, int(alpha * 255))
+                    if vecs is not None:
+                        color_val = QtGui.QColor(255, 0, 0, int(alpha * 255))
+                    pen = QtGui.QPen(color_val)
+                    pen.setWidth(2)
+                    pen.setCosmetic(True)
+                    line = scene.addLine(x1, y1, x2, y2, pen)
+                    items.append(line)
+            else:
+                for (x1, y1, z1), (x2, y2, z2) in zip(pts, pts[1:]):
+                    dist1 = abs(z1 - self.z)
+                    dist2 = abs(z2 - self.z)
+                    if dist1 > fade_dist and dist2 > fade_dist:
+                        continue
+                    alpha1 = max(0.0, 1.0 - dist1 / fade_dist)
+                    alpha2 = max(0.0, 1.0 - dist2 / fade_dist)
+                    alpha = (alpha1 + alpha2) / 2.0
+                    color_val = QtGui.QColor(0, 255, 0, int(alpha * 255))
+                    if vecs is not None:
+                        color_val = QtGui.QColor(255, 0, 0, int(alpha * 255))
+                    pen = QtGui.QPen(color_val)
+                    pen.setWidth(2)
+                    pen.setCosmetic(True)
+                    line = scene.addLine(x1, y1, x2, y2, pen)
+                    items.append(line)
+
+            if vecs is not None:
+                if use_plane:
+                    for proj, vpair in zip(projected, vecs):
+                        if proj is None:
                             continue
-                        xy_norm = math.hypot(vx, vy)
-                        if xy_norm > 0:
-                            vx_xy = vx / xy_norm
-                            vy_xy = vy / xy_norm
-                        else:
-                            vx_xy = 0.0
-                            vy_xy = 0.0
-                        length = 10.0 * (xy_norm / norm)
-                        x2 = x + length * vx_xy
-                        y2 = y + length * vy_xy
-                        if xy_norm > 0:
-                            line = scene.addLine(x, y, x2, y2, pen)
-                            items.append(line)
-                        head = 4.0
-                        ang = math.atan2(vy_xy, vx_xy) if xy_norm > 0 else 0.0
-                        left = ang + math.pi * 3.0 / 4.0
-                        right = ang - math.pi * 3.0 / 4.0
-                        x3 = x2 + head * math.cos(left)
-                        y3 = y2 + head * math.sin(left)
-                        x4 = x2 + head * math.cos(right)
-                        y4 = y2 + head * math.sin(right)
-                        items.append(scene.addLine(x2, y2, x3, y3, pen))
-                        items.append(scene.addLine(x2, y2, x4, y4, pen))
+                        px, py, alpha = proj
+                        for vec, color in [
+                            (vpair[0], QtGui.QColor(0, 0, 255, int(alpha * 255))),
+                            (vpair[1], QtGui.QColor(255, 0, 0, int(alpha * 255))),
+                        ]:
+                            pen = QtGui.QPen(color)
+                            pen.setWidth(2)
+                            pen.setCosmetic(True)
+                            vx, vy, vz = float(vec[0]), float(vec[1]), float(vec[2])
+                            norm = math.sqrt(vx * vx + vy * vy + vz * vz)
+                            if norm == 0:
+                                continue
+                            vxp = float(np.dot([vx, vy, vz], ax))
+                            vyp = float(np.dot([vx, vy, vz], ay))
+                            plane_norm = math.hypot(vxp, vyp)
+                            if plane_norm > 0:
+                                vx_unit = vxp / plane_norm
+                                vy_unit = vyp / plane_norm
+                            else:
+                                vx_unit = 0.0
+                                vy_unit = 0.0
+                            length = 10.0 * (plane_norm / norm)
+                            x2 = px + length * vx_unit
+                            y2 = py + length * vy_unit
+                            if plane_norm > 0:
+                                line = scene.addLine(px, py, x2, y2, pen)
+                                items.append(line)
+                            head = 4.0
+                            ang = math.atan2(vy_unit, vx_unit) if plane_norm > 0 else 0.0
+                            left = ang + math.pi * 3.0 / 4.0
+                            right = ang - math.pi * 3.0 / 4.0
+                            x3 = x2 + head * math.cos(left)
+                            y3 = y2 + head * math.sin(left)
+                            x4 = x2 + head * math.cos(right)
+                            y4 = y2 + head * math.sin(right)
+                            items.append(scene.addLine(x2, y2, x3, y3, pen))
+                            items.append(scene.addLine(x2, y2, x4, y4, pen))
+                else:
+                    for (x, y, z), vpair in zip(pts, vecs):
+                        dist = abs(z - self.z)
+                        if dist > fade_dist:
+                            continue
+                        alpha = max(0.0, 1.0 - dist / fade_dist)
+                        for vec, color in [
+                            (vpair[0], QtGui.QColor(0, 0, 255, int(alpha * 255))),
+                            (vpair[1], QtGui.QColor(255, 0, 0, int(alpha * 255))),
+                        ]:
+                            pen = QtGui.QPen(color)
+                            pen.setWidth(2)
+                            pen.setCosmetic(True)
+                            vx, vy, vz = float(vec[0]), float(vec[1]), float(vec[2])
+                            norm = math.sqrt(vx * vx + vy * vy + vz * vz)
+                            if norm == 0:
+                                continue
+                            xy_norm = math.hypot(vx, vy)
+                            if xy_norm > 0:
+                                vx_xy = vx / xy_norm
+                                vy_xy = vy / xy_norm
+                            else:
+                                vx_xy = 0.0
+                                vy_xy = 0.0
+                            length = 10.0 * (xy_norm / norm)
+                            x2 = x + length * vx_xy
+                            y2 = y + length * vy_xy
+                            if xy_norm > 0:
+                                line = scene.addLine(x, y, x2, y2, pen)
+                                items.append(line)
+                            head = 4.0
+                            ang = math.atan2(vy_xy, vx_xy) if xy_norm > 0 else 0.0
+                            left = ang + math.pi * 3.0 / 4.0
+                            right = ang - math.pi * 3.0 / 4.0
+                            x3 = x2 + head * math.cos(left)
+                            y3 = y2 + head * math.sin(left)
+                            x4 = x2 + head * math.cos(right)
+                            y4 = y2 + head * math.sin(right)
+                            items.append(scene.addLine(x2, y2, x3, y3, pen))
+                            items.append(scene.addLine(x2, y2, x4, y4, pen))
             self._model_items.append(items)
 
     def _load_models_for_file(self, idx):
@@ -753,8 +844,8 @@ class TomoViewer(QtWidgets.QWidget):
                 if arr.shape[1] < 8:
                     continue
                 pts = arr[:, 3:6]
-                tilts = arr[:, 7]
-                vecs = np.array([tilt_to_z_vectors(t) for t in tilts])
+                eulers = arr[:, 6:9]
+                vecs = np.array([euler_to_vectors(*ang) for ang in eulers])
                 self.add_model(rcsv, pts, vecs)
             except Exception:
                 continue

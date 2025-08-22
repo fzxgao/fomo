@@ -176,3 +176,52 @@ def tilt_to_z_vectors(tilt: float) -> tuple[np.ndarray, np.ndarray]:
     orig_z = np.array([0.0, 0.0, 1.0])
     new_z = np.array([0.0, -np.sin(rtilt), np.cos(rtilt)])
     return orig_z, new_z
+
+def euler_to_vectors(tdrot: float, tilt: float, narot: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return unit vectors for rotated X and Z axes.
+
+    Parameters
+    ----------
+    tdrot, tilt, narot:
+        Euler angles in degrees following Dynamo's ``Z-X-Z`` convention.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        A pair ``(x_vec, z_vec)`` with unit vectors representing the rotated
+        X and Z axes respectively.
+    """
+
+    rtdrot = np.deg2rad(tdrot)
+    rtilt = np.deg2rad(tilt)
+    rnarot = np.deg2rad(narot)
+
+    rz1 = np.array(
+        [
+            [np.cos(rtdrot), -np.sin(rtdrot), 0.0],
+            [np.sin(rtdrot), np.cos(rtdrot), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    rx = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, np.cos(rtilt), -np.sin(rtilt)],
+            [0.0, np.sin(rtilt), np.cos(rtilt)],
+        ]
+    )
+
+    rz2 = np.array(
+        [
+            [np.cos(rnarot), -np.sin(rnarot), 0.0],
+            [np.sin(rnarot), np.cos(rnarot), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    R = rz1 @ rx @ rz2
+
+    x_vec = R @ np.array([1.0, 0.0, 0.0])
+    z_vec = R @ np.array([0.0, 0.0, 1.0])
+    return x_vec, z_vec

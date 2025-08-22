@@ -879,7 +879,7 @@ class TomoViewer(QtWidgets.QWidget):
             table_path = subset_tbl
 
         box_size = int(self.picking_panel.box_size.value())
-        out_dir = catalogue / "tomograms" / "alignments" / "average_reference" / str(box_size)
+        out_dir = catalogue / "alignments" / "average_reference" / str(box_size)
         out_dir.mkdir(parents=True, exist_ok=True)
         out_file = out_dir / "rawTemplate.em"
 
@@ -902,7 +902,7 @@ class TomoViewer(QtWidgets.QWidget):
     def _on_initial_average_finished(self, out_file, script_path):
         Path(script_path).unlink(missing_ok=True)
         try:
-            vol = read_em(out_file)[0]
+            header, vol = read_em(out_file)
         except Exception as e:
             if self._verbose:
                 print(f"[initial_avg] failed to read average: {e}")

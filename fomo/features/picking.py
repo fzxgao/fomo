@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from .realtime_extraction import extract_particles_on_exit
+from .merge_particles import merge_crop_tables_and_particles
 
 class ParticleExtractionWorker(QtCore.QObject):
     """Background worker extracting particles and cleaning up models."""
@@ -22,6 +23,7 @@ class ParticleExtractionWorker(QtCore.QObject):
         self.started.emit()
         try:
             extract_particles_on_exit(self.viewer)
+            merge_crop_tables_and_particles(Path.cwd())
             self._cleanup_fn()
         finally:
             self.finished.emit()
@@ -63,6 +65,22 @@ class PickingModeHandler:
         # Background extraction worker/thread
         self._extraction_worker = None
         self._extraction_thread = None
+
+    def __del__(self):
+        self._stop_extraction_thread()
+
+    def _stop_extraction_thread(self):
+        """Terminate any running extraction thread."""
+        thread = self._extraction_thread
+        if thread is not None:
+            try:
+                if thread.isRunning():
+                    thread.quit()
+                    thread.wait()
+            except Exception:
+                pass
+        self._extraction_thread = None
+        self._extraction_worker = None
 
     # -------- Public API --------
     def is_active(self):
@@ -124,6 +142,10 @@ class PickingModeHandler:
         self._points.clear()
         self.finish_plane()
 
+
+        # Ensure any previous extraction thread has completed
+        self._stop_extraction_thread()
+
         # Launch background worker for particle extraction and cleanup
         self._extraction_worker = ParticleExtractionWorker(
             self.viewer, self.cleanup_empty_model_dirs
@@ -136,7 +158,7 @@ class PickingModeHandler:
         self._extraction_worker.finished.connect(self._extraction_thread.quit)
         self._extraction_worker.finished.connect(self._extraction_worker.deleteLater)
         self._extraction_thread.finished.connect(self._extraction_thread.deleteLater)
-        self._extraction_worker.finished.connect(self._on_extraction_finished)
+        self._extraction_thread.finished.connect(self._on_extraction_finished)
         self._extraction_thread.started.connect(self._extraction_worker.run)
         self._extraction_thread.start()
 
@@ -240,7 +262,7 @@ class PickingModeHandler:
             self.viewer.lbl.setText(self.viewer.lbl.text().replace(tag, ""))
         except Exception:
             pass
-        
+
     def _on_extraction_finished(self):
         """Handle UI updates after background extraction completes."""
         self._remove_status_tag(" | Extracting particles...")
@@ -255,8 +277,9 @@ class PickingModeHandler:
                     self.viewer.lbl.adjustSize()
             except Exception:
                 pass
-        self._extraction_worker = None
-        self._extraction_thread = None
+       # Thread has finished, ensure our references are cleared
+        self._stop_extraction_thread()
+
 
     def cleanup_empty_model_dirs(self):
         """Remove empty volume directories for the current tomogram."""

@@ -19,7 +19,7 @@ from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
-from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
+from fomo.features.refined_import import import_refined_coordinates,  tilt_to_z_vectors
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -683,19 +683,25 @@ class TomoViewer(QtWidgets.QWidget):
                         pen = QtGui.QPen(color)
                         pen.setWidth(2)
                         pen.setCosmetic(True)
-                        vx, vy = float(vec[0]), float(vec[1])
-                        norm = math.hypot(vx, vy)
+                        vx, vy, vz = float(vec[0]), float(vec[1]), float(vec[2])
+                        norm = math.sqrt(vx * vx + vy * vy + vz * vz)
                         if norm == 0:
                             continue
-                        vx /= norm
-                        vy /= norm
-                        length = 10.0
-                        x2 = x + length * vx
-                        y2 = y + length * vy
-                        line = scene.addLine(x, y, x2, y2, pen)
-                        items.append(line)
+                        xy_norm = math.hypot(vx, vy)
+                        if xy_norm > 0:
+                            vx_xy = vx / xy_norm
+                            vy_xy = vy / xy_norm
+                        else:
+                            vx_xy = 0.0
+                            vy_xy = 0.0
+                        length = 10.0 * (xy_norm / norm)
+                        x2 = x + length * vx_xy
+                        y2 = y + length * vy_xy
+                        if xy_norm > 0:
+                            line = scene.addLine(x, y, x2, y2, pen)
+                            items.append(line)
                         head = 4.0
-                        ang = math.atan2(vy, vx)
+                        ang = math.atan2(vy_xy, vx_xy) if xy_norm > 0 else 0.0
                         left = ang + math.pi * 3.0 / 4.0
                         right = ang - math.pi * 3.0 / 4.0
                         x3 = x2 + head * math.cos(left)
@@ -744,12 +750,11 @@ class TomoViewer(QtWidgets.QWidget):
             try:
                 arr = np.loadtxt(rcsv, delimiter=",")
                 arr = np.atleast_2d(arr)
-                if arr.shape[1] < 9:
+                if arr.shape[1] < 8:
                     continue
                 pts = arr[:, 3:6]
-                eulers = arr[:, 6:9]
-                x_vecs, z_vecs = zip(*(euler_to_vectors(*ang) for ang in eulers))
-                vecs = np.stack((x_vecs, z_vecs), axis=1)
+                tilts = arr[:, 7]
+                vecs = np.array([tilt_to_z_vectors(t) for t in tilts])
                 self.add_model(rcsv, pts, vecs)
             except Exception:
                 continue

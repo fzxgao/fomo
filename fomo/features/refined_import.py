@@ -156,19 +156,23 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
     return path_to_tomograms, path_to_refined_tbl
 
 
-def euler_to_vectors(tdrot: float, tilt: float, narot: float) -> tuple[np.ndarray, np.ndarray]:
-    """Return rotated x- and z-axis unit vectors for given Euler angles."""
-    rtd, rtilt, rnar = np.deg2rad([tdrot, tilt, narot])
-    rz1 = np.array([[np.cos(rtd), -np.sin(rtd), 0],
-                    [np.sin(rtd),  np.cos(rtd), 0],
-                    [0,            0,           1]])
-    rx = np.array([[1, 0, 0],
-                   [0, np.cos(rtilt), -np.sin(rtilt)],
-                   [0, np.sin(rtilt),  np.cos(rtilt)]])
-    rz2 = np.array([[np.cos(rnar), -np.sin(rnar), 0],
-                    [np.sin(rnar),  np.cos(rnar), 0],
-                    [0,            0,           1]])
-    R = rz2 @ rx @ rz1
-    x_vec = R @ np.array([1.0, 0.0, 0.0])
-    z_vec = R @ np.array([0.0, 0.0, 1.0])
-    return x_vec, z_vec
+def tilt_to_z_vectors(tilt: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return original and tilt-rotated z-axis unit vectors.
+
+    Parameters
+    ----------
+    tilt:
+        Tilt angle in degrees.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        A pair ``(orig_z, new_z)`` where ``orig_z`` is the unit vector along the
+        original Z axis and ``new_z`` is the unit vector obtained after rotating
+        ``orig_z`` by ``tilt`` degrees about the X axis.
+    """
+
+    rtilt = np.deg2rad(tilt)
+    orig_z = np.array([0.0, 0.0, 1.0])
+    new_z = np.array([0.0, -np.sin(rtilt), np.cos(rtilt)])
+    return orig_z, new_z

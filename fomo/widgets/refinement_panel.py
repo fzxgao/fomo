@@ -50,47 +50,47 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         v.addWidget(QtWidgets.QLabel("Numerical parameters"))
         form = QtWidgets.QFormLayout()
         # 1 Iterations
-        self.iterations = QtWidgets.QSpinBox(); self.iterations.setValue(4)
+        self.iterations = QtWidgets.QSpinBox(); self.iterations.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.iterations.setValue(4)
         form.addRow("Iterations", self.iterations)
         # 2 References
-        self.references = QtWidgets.QSpinBox(); self.references.setValue(1)
+        self.references = QtWidgets.QSpinBox(); self.references.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.references.setValue(1)
         form.addRow("References", self.references)
         # 3 Cone Aperture
-        self.cone_aperture = QtWidgets.QSpinBox(); self.cone_aperture.setValue(45)
+        self.cone_aperture = QtWidgets.QSpinBox(); self.cone_aperture.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.cone_aperture.setValue(45)
         form.addRow("Cone Aperture", self.cone_aperture)
         # 4 Cone Sampling
-        self.cone_sampling = QtWidgets.QSpinBox(); self.cone_sampling.setValue(15)
+        self.cone_sampling = QtWidgets.QSpinBox(); self.cone_sampling.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.cone_sampling.setValue(15)
         form.addRow("Cone Sampling", self.cone_sampling)
         # 5 Azimuth Rotation Range
-        self.az_rot_range = QtWidgets.QSpinBox(); self.az_rot_range.setValue(60)
+        self.az_rot_range = QtWidgets.QSpinBox(); self.az_rot_range.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.az_rot_range.setValue(60)
         form.addRow("Azimuth Rotation Range", self.az_rot_range)
         # 6 Azimuth Rotation Sampling
-        self.az_rot_sampling = QtWidgets.QSpinBox(); self.az_rot_sampling.setValue(15)
+        self.az_rot_sampling = QtWidgets.QSpinBox(); self.az_rot_sampling.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.az_rot_sampling.setValue(15)
         form.addRow("Azimuth Rotation Sampling", self.az_rot_sampling)
         # 7 Refine
-        self.refine = QtWidgets.QSpinBox(); self.refine.setValue(2)
+        self.refine = QtWidgets.QSpinBox(); self.refine.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.refine.setValue(2)
         form.addRow("Refine", self.refine)
         # 8 Refine Factor
-        self.refine_factor = QtWidgets.QSpinBox(); self.refine_factor.setValue(2)
+        self.refine_factor = QtWidgets.QSpinBox(); self.refine_factor.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.refine_factor.setValue(2)
         form.addRow("Refine Factor", self.refine_factor)
         # 9 High Pass
-        self.high_pass = QtWidgets.QSpinBox(); self.high_pass.setValue(1)
+        self.high_pass = QtWidgets.QSpinBox(); self.high_pass.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.high_pass.setValue(1)
         form.addRow("High Pass", self.high_pass)
         #10 Low Pass
-        self.low_pass = QtWidgets.QSpinBox(); self.low_pass.setValue(12)
+        self.low_pass = QtWidgets.QSpinBox(); self.low_pass.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.low_pass.setValue(12)
         form.addRow("Low Pass", self.low_pass)
         #11 Symmetry
         self.symmetry = QtWidgets.QLineEdit("C1")
         form.addRow("Symmetry", self.symmetry)
         #12 Particle Dimensions
-        self.particle_dims = QtWidgets.QSpinBox(); self.particle_dims.setValue(40)
+        self.particle_dims = QtWidgets.QSpinBox(); self.particle_dims.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.particle_dims.setValue(40)
         form.addRow("Particle Dimensions", self.particle_dims)
         #13 Shift limits
         shift_widget = QtWidgets.QWidget()
         sh = QtWidgets.QHBoxLayout(shift_widget)
-        self.shift_x = QtWidgets.QSpinBox(); self.shift_x.setValue(4); self.shift_x.setMinimumWidth(30)
-        self.shift_y = QtWidgets.QSpinBox(); self.shift_y.setValue(4); self.shift_y.setMinimumWidth(30)
-        self.shift_z = QtWidgets.QSpinBox(); self.shift_z.setValue(12); self.shift_z.setMinimumWidth(30)
+        self.shift_x = QtWidgets.QSpinBox(); self.shift_x.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.shift_x.setValue(4); self.shift_x.setMinimumWidth(30)
+        self.shift_y = QtWidgets.QSpinBox(); self.shift_y.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.shift_y.setValue(4); self.shift_y.setMinimumWidth(30)
+        self.shift_z = QtWidgets.QSpinBox(); self.shift_z.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.shift_z.setValue(12); self.shift_z.setMinimumWidth(30)
         sh.addWidget(self.shift_x); sh.addWidget(self.shift_y); sh.addWidget(self.shift_z)
         form.addRow("Shift limits", shift_widget)
         #14 Shift limiting way
@@ -104,13 +104,13 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.shift_way.setCurrentText("From the center of the particle cube")
         form.addRow("Shift limiting way", self.shift_way)
         #15 Separation in Tomogram
-        self.separation = QtWidgets.QSpinBox(); self.separation.setValue(20)
+        self.separation = QtWidgets.QSpinBox(); self.separation.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.separation.setValue(20)
         form.addRow("Separation in Tomogram", self.separation)
         #16 Basic MRA
-        self.basic_mra = QtWidgets.QSpinBox(); self.basic_mra.setValue(0)
+        self.basic_mra = QtWidgets.QSpinBox(); self.basic_mra.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.basic_mra.setValue(0)
         form.addRow("Basic MRA", self.basic_mra)
         #17 Threshold parameter
-        self.threshold_param = QtWidgets.QDoubleSpinBox(); self.threshold_param.setValue(0.2)
+        self.threshold_param = QtWidgets.QDoubleSpinBox(); self.threshold_param.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons); self.threshold_param.setValue(0.2)
         form.addRow("Threshold parameter", self.threshold_param)
         #18 Threshold Mode
         self.threshold_mode = QtWidgets.QComboBox()
@@ -163,6 +163,8 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.import_right = QtWidgets.QToolButton()
         self.import_right.setArrowType(QtCore.Qt.RightArrow)
         btns.addWidget(self.import_right)
+        self.export_relion_btn = QtWidgets.QPushButton("Export to RELION")
+        btns.addWidget(self.export_relion_btn)
         v.addLayout(btns)
         self.addWidget(widget)
 

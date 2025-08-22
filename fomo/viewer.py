@@ -164,6 +164,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.side_panel.setCurrentWidget(self.refinement_panel)
         h.addWidget(self.side_panel)
         self.refinement_panel.import_btn.clicked.connect(self._import_refined)
+        self.refinement_panel.export_relion_btn.clicked.connect(self._export_relion)
         self.refinement_panel.calc_initial_btn.clicked.connect(self._calculate_initial_average)
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
@@ -860,6 +861,10 @@ class TomoViewer(QtWidgets.QWidget):
             if self._verbose:
                 print(f"[refined] import failed: {e}")
 
+    def _export_relion(self):
+        if self._verbose:
+            print("[refined] export to RELION not implemented")
+
     def _load_latest_initial_average(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / "average_reference"
         try:
@@ -876,8 +881,17 @@ class TomoViewer(QtWidgets.QWidget):
                 print(f"[initial_avg] failed to read average: {e}")
             return
         self._initial_avg = vol
-        self._initial_avg_min = float(vol.min())
-        self._initial_avg_max = float(vol.max())
+        amin = float(vol.min())
+        amax = float(vol.max())
+        amean = float(vol.mean())
+        if amax <= amin:
+            self._initial_avg_min, self._initial_avg_max = amin, amax
+        else:
+            rng = (amax - amin) / 3.0
+            self._initial_avg_min, self._initial_avg_max = (
+                amean - rng,
+                amean + rng,
+            )
         for axis, slider in enumerate(self.refinement_panel.initial_avg_sliders):
             slider.blockSignals(True)
             slider.setMinimum(0)

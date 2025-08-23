@@ -293,9 +293,12 @@ class PickingModeHandler:
             pass
 
     def tbl_file_change_unchanged_check(self):
-        """Detect changes in volume table files within the dynamo catalogue."""
+        """Detect changes in table files under volume_* directories within the dynamo catalogue."""
         root = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
-        tbls = list(root.glob("volume_*.tbl"))
+        tbls = []
+        for d in root.glob("volume_*"):
+            if d.is_dir():
+                tbls.extend(p for p in d.rglob("*tbl") if p.is_file())
         if not tbls:
             self.tbl_unchanged = True
             return

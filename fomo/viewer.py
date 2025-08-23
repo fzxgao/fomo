@@ -1278,7 +1278,7 @@ class TomoViewer(QtWidgets.QWidget):
         if not nums:
             return
         n = int(nums[-1])
-        if n <= self._last_refine_iter:
+        if n <= self._last_refine_iter:  
             if self._refine_run_proc and self._refine_run_proc.poll() is not None:
                 self._finish_refinement()
             return
@@ -1296,15 +1296,17 @@ class TomoViewer(QtWidgets.QWidget):
         else:
             rng = (amax - amin) / 3.0
             self._refined_avg_min, self._refined_avg_max = (amean - rng, amean + rng)
-        for axis, slider in enumerate(self.refinement_panel.refined_sliders):
-            slider.blockSignals(True)
-            slider.setMinimum(0)
-            slider.setMaximum(vol.shape[axis] - 1)
-            slider.setValue(vol.shape[axis] // 2)
-            slider.valueChanged.connect(
-                lambda val, a=axis: self._update_refined_slice(a, val)
-            )
-            slider.blockSignals(False)
+        for axis in range(3):
+            for panel in (self.refinement_panel, self.picking_panel):
+                slider = panel.refined_sliders[axis]
+                slider.blockSignals(True)
+                slider.setMinimum(0)
+                slider.setMaximum(vol.shape[axis] - 1)
+                slider.setValue(vol.shape[axis] // 2)
+                slider.valueChanged.connect(
+                    lambda val, a=axis: self._update_refined_slice(a, val)
+                )
+                slider.blockSignals(False)
             self._update_refined_slice(axis, vol.shape[axis] // 2)
         self._last_refine_iter = n
         if n >= max_ite or (

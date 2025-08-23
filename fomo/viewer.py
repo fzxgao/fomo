@@ -1092,7 +1092,7 @@ class TomoViewer(QtWidgets.QWidget):
                 f"dcp.new('{folder}','d','../tomograms/merged/','template',"
                 f"'./average_reference/{params['box_size']}/rawTemplate.em','masks','default','t','../tomograms/merged/merged_crop.tbl','show','0');"
             ),
-            "dvput('','destination','standalone_gpu');",
+            f"dvput('{folder}','destination','standalone_gpu');",
             f"dvput('{folder}','ite_r1',{params['ite']});",
             f"dvput('{folder}','nref_r1',{params['nref']});",
             f"dvput('{folder}','cone_range_r1',{params['cone_range']});",

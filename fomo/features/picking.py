@@ -62,9 +62,15 @@ class PickingModeHandler:
         # Track whether the current drag target was an existing point or a new one
         self._drag_existing = False
 
+        # Track volume table modification times
+        self._volume_tbl_mtime = {}
+        self.tbl_unchanged = False
+
         # Background extraction worker/thread
         self._extraction_worker = None
         self._extraction_thread = None
+        # Snapshot of volume directories to detect changes
+        self._volume_snapshot = self._compute_volume_snapshot()
 
     def __del__(self):
         self._stop_extraction_thread()
@@ -82,6 +88,20 @@ class PickingModeHandler:
         self._extraction_thread = None
         self._extraction_worker = None
 
+    def _compute_volume_snapshot(self):
+        """Return sorted list of file modification times in volume directories."""
+        root = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        snap = []
+        if root.exists():
+            for path in root.rglob("*"):
+                if path.is_file():
+                    try:
+                        snap.append((path.relative_to(root), path.stat().st_mtime))
+                    except Exception:
+                        pass
+        snap.sort()
+        return snap
+
     # -------- Public API --------
     def is_active(self):
         return self._active
@@ -93,6 +113,9 @@ class PickingModeHandler:
         self._active = True
         self._points.clear()
         self._line = None
+        # Snapshot current volume table state
+        self.tbl_file_change_unchanged_check()
+        self.tbl_unchanged = False
 
         # Save and hide layout components for performance
         xz_vis = getattr(self.viewer, "xz_visible", True)
@@ -146,21 +169,27 @@ class PickingModeHandler:
         # Ensure any previous extraction thread has completed
         self._stop_extraction_thread()
 
-        # Launch background worker for particle extraction and cleanup
-        self._extraction_worker = ParticleExtractionWorker(
-            self.viewer, self.cleanup_empty_model_dirs
-        )
-        self._extraction_thread = QtCore.QThread()
-        self._extraction_worker.moveToThread(self._extraction_thread)
-        self._extraction_worker.started.connect(
-            lambda: self._append_status(" | Extracting particles...")
-        )
-        self._extraction_worker.finished.connect(self._extraction_thread.quit)
-        self._extraction_worker.finished.connect(self._extraction_worker.deleteLater)
-        self._extraction_thread.finished.connect(self._extraction_thread.deleteLater)
-        self._extraction_thread.finished.connect(self._on_extraction_finished)
-        self._extraction_thread.started.connect(self._extraction_worker.run)
-        self._extraction_thread.start()
+        # Check if any catalogue files changed since last extraction
+        snapshot = self._compute_volume_snapshot()
+        if snapshot == self._volume_snapshot:
+            self.cleanup_empty_model_dirs()
+            self._on_extraction_finished()
+        else:
+            # Launch background worker for particle extraction and cleanup
+            self._extraction_worker = ParticleExtractionWorker(
+                self.viewer, self.cleanup_empty_model_dirs
+            )
+            self._extraction_thread = QtCore.QThread()
+            self._extraction_worker.moveToThread(self._extraction_thread)
+            self._extraction_worker.started.connect(
+                lambda: self._append_status(" | Extracting particles...")
+            )
+            self._extraction_worker.finished.connect(self._extraction_thread.quit)
+            self._extraction_worker.finished.connect(self._extraction_worker.deleteLater)
+            self._extraction_thread.finished.connect(self._extraction_thread.deleteLater)
+            self._extraction_thread.finished.connect(self._on_extraction_finished)
+            self._extraction_thread.started.connect(self._extraction_worker.run)
+            self._extraction_thread.start()
 
 
         # Restore layout
@@ -263,6 +292,43 @@ class PickingModeHandler:
         except Exception:
             pass
 
+    def tbl_file_change_unchanged_check(self):
+        """Detect changes in volume table files within the dynamo catalogue."""
+        root = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        tbls = list(root.glob("volume_*.tbl"))
+        if not tbls:
+            self.tbl_unchanged = True
+            return
+        unchanged = True
+        for tbl in tbls:
+            try:
+                mtime = tbl.stat().st_mtime
+            except OSError:
+                continue
+            prev = self._volume_tbl_mtime.get(tbl)
+            if prev is None or mtime != prev:
+                unchanged = False
+            self._volume_tbl_mtime[tbl] = mtime
+        self.tbl_unchanged = unchanged
+
+    def maybe_run_refinement(self):
+        """Run refinement project setup if volume tables changed."""
+        self.tbl_file_change_unchanged_check()
+        if self.tbl_unchanged:
+            return
+        if hasattr(self.viewer, "_clear_refined_views"):
+            self.viewer._clear_refined_views()
+        if hasattr(self.viewer, "_finish_refinement"):
+            self.viewer._finish_refinement()
+        if hasattr(self.viewer, "_collect_refinement_params") and hasattr(
+            self.viewer, "_setup_refinement_project"
+        ):
+            folder, params = self.viewer._collect_refinement_params()
+            catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+            align_dir = catalogue / folder
+            self.viewer._refine_folder = folder
+            self.viewer._setup_refinement_project(folder, align_dir, params)
+
     def _on_extraction_finished(self):
         """Handle UI updates after background extraction completes."""
         self._remove_status_tag(" | Extracting particles...")
@@ -280,22 +346,12 @@ class PickingModeHandler:
         # Thread has finished, ensure our references are cleared
         self._stop_extraction_thread()
 
-        # After particles are extracted, start a fresh refinement project
+        # After particles are extracted, maybe start a fresh refinement project
         try:
-            if hasattr(self.viewer, "_clear_refined_views"):
-                self.viewer._clear_refined_views()
-            if hasattr(self.viewer, "_finish_refinement"):
-                self.viewer._finish_refinement()
-            if hasattr(self.viewer, "_collect_refinement_params") and hasattr(
-                self.viewer, "_setup_refinement_project"
-            ):
-                folder, params = self.viewer._collect_refinement_params()
-                catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
-                align_dir = catalogue / folder
-                self.viewer._refine_folder = folder
-                self.viewer._setup_refinement_project(folder, align_dir, params)
+            self.maybe_run_refinement()
         except Exception:
             pass
+        self._volume_snapshot = self._compute_volume_snapshot()
 
 
 

@@ -145,6 +145,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._build_ui()
         self.top_split.installEventFilter(self)
         self.load_file(self.idx)
+        self._load_latest_refined_average()
 
     # ---------- Verbose window resize ----------
     def resizeEvent(self, event):
@@ -178,7 +179,8 @@ class TomoViewer(QtWidgets.QWidget):
         self.refinement_panel.import_btn.clicked.connect(self._import_refined)
         self.refinement_panel.export_relion_btn.clicked.connect(self._export_relion)
         self.refinement_panel.calc_initial_btn.clicked.connect(self._calculate_initial_average)
-
+        self.picking_panel.import_btn.clicked.connect(self._import_refined)
+        self.picking_panel.export_relion_btn.clicked.connect(self._export_relion)
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         v.addWidget(self.splitter, 1)
 
@@ -888,6 +890,7 @@ class TomoViewer(QtWidgets.QWidget):
         latest = max(candidates, key=lambda p: p.stat().st_mtime)
         try:
             header, vol = read_em(latest)
+            vol = np.transpose(vol, (2, 1, 0))
         except Exception as e:
             if self._verbose:
                 print(f"[initial_avg] failed to read average: {e}")
@@ -915,8 +918,13 @@ class TomoViewer(QtWidgets.QWidget):
             slider.blockSignals(False)
             self._update_initial_avg_slice(axis, vol.shape[axis] // 2)
 
-        # Trigger refinement after initial average
-        self._maybe_start_refinement()
+        align_root = catalogue.parent
+        existing_runs = [
+            d for d in align_root.iterdir()
+            if d.is_dir() and d.name != "average_reference"
+        ]
+        if candidates and not existing_runs:
+            self._maybe_start_refinement()
 
     def _calculate_initial_average(self):
         """Run dynamo averaging on a random subset of particles."""
@@ -972,6 +980,7 @@ class TomoViewer(QtWidgets.QWidget):
         Path(script_path).unlink(missing_ok=True)
         try:
             header, vol = read_em(out_file)
+            vol = np.transpose(vol, (2, 1, 0))
         except Exception as e:
             if self._verbose:
                 print(f"[initial_avg] failed to read average: {e}")
@@ -1192,18 +1201,65 @@ class TomoViewer(QtWidgets.QWidget):
         self._refined_avg = None
         self._refined_avg_min = None
         self._refined_avg_max = None
-        for label in self.refinement_panel.refined_views:
-            label.clear()
-        for slider in self.refinement_panel.refined_sliders:
-            try:
-                slider.valueChanged.disconnect()
-            except TypeError:
-                pass
-            slider.blockSignals(True)
-            slider.setMinimum(0)
-            slider.setMaximum(0)
-            slider.setValue(0)
-            slider.blockSignals(False)
+        for panel in (self.refinement_panel, self.picking_panel):
+            for label in panel.refined_views:
+                label.clear()
+            for slider in panel.refined_sliders:
+                try:
+                    slider.valueChanged.disconnect()
+                except TypeError:
+                    pass
+                slider.blockSignals(True)
+                slider.setMinimum(0)
+                slider.setMaximum(0)
+                slider.setValue(0)
+                slider.blockSignals(False)
+
+    def _load_latest_refined_average(self):
+        """Load the most recent refined average volume if present."""
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+        try:
+            candidates = list(
+                catalogue.glob("*/results/ite_*/averages/average_ref_001_ite_*.em")
+            )
+        except Exception:
+            candidates = []
+        if not candidates:
+            return
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        nums = re.findall(r"\d+", latest.name)
+        if not nums:
+            return
+        n = int(nums[-1])
+        try:
+            header, vol = read_em(latest)
+            vol = np.transpose(vol, (2, 1, 0))
+        except Exception:
+            return
+        self._refined_avg = vol
+        amin = float(vol.min())
+        amax = float(vol.max())
+        amean = float(vol.mean())
+        if amax <= amin:
+            self._refined_avg_min, self._refined_avg_max = amin, amax
+        else:
+            rng = (amax - amin) / 3.0
+            self._refined_avg_min, self._refined_avg_max = (amean - rng, amean + rng)
+        for axis in range(3):
+            for panel in (self.refinement_panel, self.picking_panel):
+                slider = panel.refined_sliders[axis]
+                slider.blockSignals(True)
+                slider.setMinimum(0)
+                slider.setMaximum(vol.shape[axis] - 1)
+                slider.setValue(vol.shape[axis] // 2)
+                slider.valueChanged.connect(
+                    lambda val, a=axis: self._update_refined_slice(a, val)
+                )
+                slider.blockSignals(False)
+            self._update_refined_slice(axis, vol.shape[axis] // 2)
+        self._last_refine_iter = n
+        self._refine_folder = latest.parents[3].name
+
 
     def _check_refinement_results(self, align_dir, max_ite):
         results = align_dir / "results"
@@ -1228,6 +1284,7 @@ class TomoViewer(QtWidgets.QWidget):
             return
         try:
             header, vol = read_em(latest)
+            vol = np.transpose(vol, (2, 1, 0))
         except Exception:
             return
         self._refined_avg = vol
@@ -1268,11 +1325,12 @@ class TomoViewer(QtWidgets.QWidget):
         ).clip(0, 255).astype(np.uint8)
         h, w = arr.shape
         qimg = QtGui.QImage(arr.data, w, h, w, QtGui.QImage.Format_Grayscale8)
-        label = self.refinement_panel.refined_views[axis]
-        pix = QtGui.QPixmap.fromImage(qimg).scaled(
-            label.width(), label.height(), QtCore.Qt.KeepAspectRatio
-        )
-        label.setPixmap(pix)
+        for panel in (self.refinement_panel, self.picking_panel):
+            label = panel.refined_views[axis]
+            pix = QtGui.QPixmap.fromImage(qimg).scaled(
+                label.width(), label.height(), QtCore.Qt.KeepAspectRatio
+            )
+            label.setPixmap(pix)
 
     def _finish_refinement(self):
         if self._refine_timer is not None:

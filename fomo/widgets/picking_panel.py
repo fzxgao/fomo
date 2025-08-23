@@ -36,6 +36,7 @@ class PickingSidePanel(QtWidgets.QSplitter):
         super().__init__(QtCore.Qt.Vertical, *args, **kwargs)
         self._build_models_panel()
         self._build_params_panel()
+        self._build_live_refinement_section()
 
     # -------- Models panel --------
     def _build_models_panel(self):
@@ -74,6 +75,43 @@ class PickingSidePanel(QtWidgets.QSplitter):
         form.addRow("Box size (in pixels)", self.box_size)
         v.addLayout(form)
         self.addWidget(params_widget)
+
+    # -------- Live refinement --------
+    def _build_live_refinement_section(self):
+        widget = QtWidgets.QWidget()
+        v = QtWidgets.QVBoxLayout(widget)
+        v.addWidget(QtWidgets.QLabel("Live refinement"))
+        hl = QtWidgets.QHBoxLayout()
+        self.refined_views = []
+        self.refined_sliders = []
+        for axis in ("X", "Y", "Z"):
+            vb = QtWidgets.QVBoxLayout()
+            label = QtWidgets.QLabel(f"{axis}")
+            label.setFrameShape(QtWidgets.QFrame.Box)
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            label.setFixedSize(60, 60)
+            self.refined_views.append(label)
+            vb.addWidget(label)
+            slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            self.refined_sliders.append(slider)
+            vb.addWidget(slider)
+            hl.addLayout(vb)
+        v.addLayout(hl)
+        btns = QtWidgets.QVBoxLayout()
+        import_row = QtWidgets.QHBoxLayout()
+        self.import_left = QtWidgets.QToolButton()
+        self.import_left.setArrowType(QtCore.Qt.LeftArrow)
+        import_row.addWidget(self.import_left)
+        self.import_btn = QtWidgets.QPushButton("Import refined coordinates")
+        import_row.addWidget(self.import_btn)
+        self.import_right = QtWidgets.QToolButton()
+        self.import_right.setArrowType(QtCore.Qt.RightArrow)
+        import_row.addWidget(self.import_right)
+        btns.addLayout(import_row)
+        self.export_relion_btn = QtWidgets.QPushButton("Export to RELION")
+        btns.addWidget(self.export_relion_btn)
+        v.addLayout(btns)
+        self.addWidget(widget)
 
     def wheelEvent(self, event):
         """

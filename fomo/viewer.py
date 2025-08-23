@@ -1130,14 +1130,20 @@ class TomoViewer(QtWidgets.QWidget):
                     bytes(self._refine_setup_proc.readAllStandardError()).decode()
                 )
             )
-        self._refine_setup_proc.finished.connect(
-            lambda *_: self._run_refinement(align_dir, folder, script_path, params["ite"])
-        )
+        # Store info for when the setup process finishes
+        self._refine_script_path = script_path
+        self._refine_max_ite = params["ite"]
+        self._refine_setup_proc.finished.connect(self._run_refinement)
         self._refine_setup_proc.start("bash", [str(dyn_script), script_path])
 
-    def _run_refinement(self, align_dir, folder, script_path, max_ite):
-        Path(script_path).unlink(missing_ok=True)
+    def _run_refinement(self, *args):
+        script_path = getattr(self, "_refine_script_path", None)
+        if script_path:
+            Path(script_path).unlink(missing_ok=True)
+            self._refine_script_path = None
         self._refine_setup_proc = None
+        project = self._refine_folder
+        align_dir = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / project
         env = QtCore.QProcessEnvironment.systemEnvironment()
         extra = ":".join([
             "/net/nfs1/public/EM/CUDA/cuda-11.8/lib64",
@@ -1165,12 +1171,12 @@ class TomoViewer(QtWidgets.QWidget):
                     bytes(self._refine_run_proc.readAllStandardError()).decode()
                 )
             )
-        self._refine_run_proc.start(f"./{folder}")
+        self._refine_run_proc.start(f"./{project}")
 
         self._refine_timer = QtCore.QTimer(self)
         self._refine_timer.setInterval(30000)
         self._refine_timer.timeout.connect(
-            lambda: self._check_refinement_results(align_dir, max_ite)
+            lambda: self._check_refinement_results(align_dir, self._refine_max_ite)
         )
         self._refine_timer.start()
 

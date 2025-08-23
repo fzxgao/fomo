@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, glob, math, argparse, time
+import sys, os, glob, math, argparse, time, subprocess
 from collections import OrderedDict
 import threading
 import concurrent.futures
@@ -1144,7 +1144,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._refine_setup_proc = None
         project = self._refine_folder
         align_dir = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / project
-        env = QtCore.QProcessEnvironment.systemEnvironment()
+        env = os.environ.copy()
         extra = ":".join([
             "/net/nfs1/public/EM/CUDA/cuda-11.8/lib64",
             "/lmb/home/fgao/micromamba/envs/cryocare_11/lib/python3.8/site-packages/nvidia/cublas/lib",
@@ -1155,24 +1155,26 @@ class TomoViewer(QtWidgets.QWidget):
             "/lmb/home/fgao/micromamba/envs/dynamo/lib",
             "/lmb/home/fgao/micromamba/pkgs/libstdcxx-ng-13.1.0-hfd8a6a1_0/lib/",
         ])
-        path = env.value("PATH", "")
-        env.insert("PATH", path + ":" + extra)
-        self._refine_run_proc = QtCore.QProcess(self)
-        self._refine_run_proc.setProcessEnvironment(env)
-        self._refine_run_proc.setWorkingDirectory(str(align_dir))
-        if self._verbose:
-            self._refine_run_proc.readyReadStandardOutput.connect(
-                lambda: sys.stdout.write(
-                    bytes(self._refine_run_proc.readAllStandardOutput()).decode()
-                )
-            )
-            self._refine_run_proc.readyReadStandardError.connect(
-                lambda: sys.stdout.write(
-                    bytes(self._refine_run_proc.readAllStandardError()).decode()
-                )
-            )
-        self._refine_run_proc.start(f"./{project}")
+        env["PATH"] = env.get("PATH", "") + ":" + extra
+        exe = align_dir / project
+        exe.chmod(exe.stat().st_mode | 0o111)
 
+        self._refine_run_proc = subprocess.Popen(
+            [str(exe)],
+            cwd=str(align_dir),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+        def _log_output():
+            for line in self._refine_run_proc.stdout:
+                if self._verbose:
+                    sys.stdout.write(line)
+
+        threading.Thread(target=_log_output, daemon=True).start()
+        
         self._refine_timer = QtCore.QTimer(self)
         self._refine_timer.setInterval(30000)
         self._refine_timer.timeout.connect(

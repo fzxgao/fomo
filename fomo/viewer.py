@@ -1079,7 +1079,7 @@ class TomoViewer(QtWidgets.QWidget):
             "cd('fomo_dynamo_catalogue/alignments');",
             (
                 f"dcp.new('{folder}','d','../tomograms/merged/','template',"
-                f"'./alignments/average_reference/{params['box_size']}/rawTemplate.em','masks','default','t','../tomograms/merged/merged_crop.tbl','show','0');"
+                f"'./average_reference/{params['box_size']}/rawTemplate.em','masks','default','t','../tomograms/merged/merged_crop.tbl','show','0');"
             ),
             "dvput('','destination','standalone_gpu');",
             f"dvput('{folder}','ite_r1',{params['ite']});",

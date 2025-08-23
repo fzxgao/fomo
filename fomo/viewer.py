@@ -135,7 +135,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._refined_avg = None
         self._refined_avg_min = None
         self._refined_avg_max = None
-        self._last_refine_iter = 0
+        self._last_refine_iter = -1
         self._refine_folder = None
 
         # Preload metadata before building UI
@@ -1197,10 +1197,21 @@ class TomoViewer(QtWidgets.QWidget):
         latest = max(candidates, key=lambda p: int(re.findall(r"\d+", p.name)[0]))
         n = int(re.findall(r"\d+", latest.name)[0])
         if n <= self._last_refine_iter:
-            if n >= max_ite and (results / f"ite_{n+1:03d}").exists():
+            # If we've already displayed this iteration and it is the final
+            # one, we can safely stop monitoring.
+            if n >= max_ite:
                 self._finish_refinement()
             return
-        em_path = latest / f"averages/average_ref_001_ite_{n:03d}.em"
+        avg_dir = latest / "averages"
+        candidates = list(avg_dir.glob("average_ref_001_ite_*.em"))
+        em_path = None
+        for cand in candidates:
+            nums = re.findall(r"\d+", cand.name)
+            if nums and int(nums[-1]) == n:
+                em_path = cand
+                break
+        if em_path is None:
+            return
         try:
             header, vol = read_em(em_path)
         except Exception:
@@ -1225,7 +1236,15 @@ class TomoViewer(QtWidgets.QWidget):
             slider.blockSignals(False)
             self._update_refined_slice(axis, vol.shape[axis] // 2)
         self._last_refine_iter = n
-        if n >= max_ite or (results / f"ite_{n+1:03d}").exists():
+        # Only stop checking once the maximum iteration has been processed.
+        # The presence of a new iteration directory does not necessarily
+        # indicate that refinement has finished, as Dynamo creates the next
+        # iteration's folder (with starting values) before the averages are
+        # written.  The previous logic stopped the timer as soon as such a
+        # folder appeared, preventing later iterations from being displayed in
+        # the live refinement panel.  Now we finish only after hitting the
+        # configured maximum iteration.
+        if n >= max_ite:
             self._finish_refinement()
 
     def _update_refined_slice(self, axis, idx):
@@ -1255,7 +1274,7 @@ class TomoViewer(QtWidgets.QWidget):
             self._refine_run_proc.kill()
             self._refine_run_proc = None
         self._refine_folder = None
-        self._last_refine_iter = 0
+        self._last_refine_iter = -1
 
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):

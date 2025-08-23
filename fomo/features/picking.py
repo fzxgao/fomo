@@ -319,7 +319,9 @@ class PickingModeHandler:
         self.tbl_file_change_unchanged_check()
         if self.tbl_unchanged:
             return
-        if hasattr(self.viewer, "_clear_refined_views"):
+        if hasattr(self.viewer, "_clear_refined_views") and getattr(
+            self.viewer, "_refined_avg", None
+        ) is None:
             self.viewer._clear_refined_views()
         if hasattr(self.viewer, "_finish_refinement"):
             self.viewer._finish_refinement()
@@ -330,6 +332,8 @@ class PickingModeHandler:
             catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
             align_dir = catalogue / folder
             self.viewer._refine_folder = folder
+            if hasattr(self.viewer, "_refined_avg"):
+                self.viewer._defer_refine_display = self.viewer._refined_avg is not None
             self.viewer._setup_refinement_project(folder, align_dir, params)
 
     def _on_extraction_finished(self):

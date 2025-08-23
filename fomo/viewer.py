@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, glob, math, argparse, time, subprocess
+import sys, os, glob, math, argparse, time, subprocess, shlex
 from collections import OrderedDict
 import threading
 import concurrent.futures
@@ -1156,12 +1156,16 @@ class TomoViewer(QtWidgets.QWidget):
             "/lmb/home/fgao/micromamba/envs/dynamo/lib",
             "/lmb/home/fgao/micromamba/pkgs/libstdcxx-ng-13.1.0-hfd8a6a1_0/lib/",
         ])
-        env["PATH"] = env.get("PATH", "") + ":" + extra
+        env["LD_LIBRARY_PATH"] = env.get("LD_LIBRARY_PATH", "") + ":" + extra
         exe = align_base / f"{project}.exe"
         exe.chmod(exe.stat().st_mode | 0o111)
 
         self._refine_run_proc = subprocess.Popen(
-            [str(exe)],
+            [
+                "bash",
+                "-c",
+                f"source /lmb/home/fgao/scripts/dynamo/dynamo_activate_linux.sh && {shlex.quote(str(exe))}",
+            ],
             cwd=str(align_base),
             env=env,
             stdout=subprocess.PIPE,

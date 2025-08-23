@@ -1174,7 +1174,7 @@ class TomoViewer(QtWidgets.QWidget):
                     sys.stdout.write(line)
 
         threading.Thread(target=_log_output, daemon=True).start()
-        
+
         self._refine_timer = QtCore.QTimer(self)
         self._refine_timer.setInterval(30000)
         self._refine_timer.timeout.connect(

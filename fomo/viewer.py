@@ -1187,6 +1187,24 @@ class TomoViewer(QtWidgets.QWidget):
         )
         self._refine_timer.start()
 
+    def _clear_refined_views(self):
+        """Clear displayed refinement slices and reset associated state."""
+        self._refined_avg = None
+        self._refined_avg_min = None
+        self._refined_avg_max = None
+        for label in self.refinement_panel.refined_views:
+            label.clear()
+        for slider in self.refinement_panel.refined_sliders:
+            try:
+                slider.valueChanged.disconnect()
+            except TypeError:
+                pass
+            slider.blockSignals(True)
+            slider.setMinimum(0)
+            slider.setMaximum(0)
+            slider.setValue(0)
+            slider.blockSignals(False)
+
     def _check_refinement_results(self, align_dir, max_ite):
         results = align_dir / "results"
         if not results.exists():
@@ -1236,15 +1254,7 @@ class TomoViewer(QtWidgets.QWidget):
             slider.blockSignals(False)
             self._update_refined_slice(axis, vol.shape[axis] // 2)
         self._last_refine_iter = n
-        # Only stop checking once the maximum iteration has been processed.
-        # The presence of a new iteration directory does not necessarily
-        # indicate that refinement has finished, as Dynamo creates the next
-        # iteration's folder (with starting values) before the averages are
-        # written.  The previous logic stopped the timer as soon as such a
-        # folder appeared, preventing later iterations from being displayed in
-        # the live refinement panel.  Now we finish only after hitting the
-        # configured maximum iteration.
-        if n >= max_ite:
+        if n >= max_ite or (results / f"ite_{n+1:03d}").exists():
             self._finish_refinement()
 
     def _update_refined_slice(self, axis, idx):

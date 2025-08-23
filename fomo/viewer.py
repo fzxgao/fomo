@@ -952,6 +952,17 @@ class TomoViewer(QtWidgets.QWidget):
 
         dyn_script = Path(__file__).resolve().parent / "dynamo_setup_EDITME.sh"
         self._avg_process = QtCore.QProcess(self)
+        if self._verbose:
+            self._avg_process.readyReadStandardOutput.connect(
+                lambda: sys.stdout.write(
+                    bytes(self._avg_process.readAllStandardOutput()).decode()
+                )
+            )
+            self._avg_process.readyReadStandardError.connect(
+                lambda: sys.stdout.write(
+                    bytes(self._avg_process.readAllStandardError()).decode()
+                )
+            )
         self._avg_process.finished.connect(
             lambda *_: self._on_initial_average_finished(out_file, script_path)
         )
@@ -1108,6 +1119,17 @@ class TomoViewer(QtWidgets.QWidget):
 
         dyn_script = Path(__file__).resolve().parent / "dynamo_setup_EDITME.sh"
         self._refine_setup_proc = QtCore.QProcess(self)
+        if self._verbose:
+            self._refine_setup_proc.readyReadStandardOutput.connect(
+                lambda: sys.stdout.write(
+                    bytes(self._refine_setup_proc.readAllStandardOutput()).decode()
+                )
+            )
+            self._refine_setup_proc.readyReadStandardError.connect(
+                lambda: sys.stdout.write(
+                    bytes(self._refine_setup_proc.readAllStandardError()).decode()
+                )
+            )
         self._refine_setup_proc.finished.connect(
             lambda *_: self._run_refinement(align_dir, folder, script_path, params["ite"])
         )
@@ -1136,6 +1158,11 @@ class TomoViewer(QtWidgets.QWidget):
             self._refine_run_proc.readyReadStandardOutput.connect(
                 lambda: sys.stdout.write(
                     bytes(self._refine_run_proc.readAllStandardOutput()).decode()
+                )
+            )
+            self._refine_run_proc.readyReadStandardError.connect(
+                lambda: sys.stdout.write(
+                    bytes(self._refine_run_proc.readAllStandardError()).decode()
                 )
             )
         self._refine_run_proc.start(f"./{folder}")

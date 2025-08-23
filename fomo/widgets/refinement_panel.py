@@ -70,13 +70,9 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         v = QtWidgets.QVBoxLayout(widget)
         v.addWidget(QtWidgets.QLabel("Numerical parameters"))
 
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        v.addWidget(scroll)
-
         form_widget = QtWidgets.QWidget()
-        scroll.setWidget(form_widget)
         form = QtWidgets.QFormLayout(form_widget)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
 
         # 1 Iterations
         self.ite_r1 = QtWidgets.QSpinBox()
@@ -218,6 +214,12 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.exclusion_mode.setCurrentText("No exclusion from averaging and alignment")
         _disable_scroll(self.exclusion_mode)
         form.addRow("Exclusion Mode", self.exclusion_mode)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(form_widget)
+        v.addWidget(scroll)
 
         self.addWidget(widget)
 

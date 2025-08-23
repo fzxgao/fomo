@@ -1209,29 +1209,25 @@ class TomoViewer(QtWidgets.QWidget):
         results = align_dir / "results"
         if not results.exists():
             return
-        candidates = [p for p in results.iterdir() if p.is_dir() and p.name.startswith("ite")]
+        try:
+            candidates = list(
+                results.glob("ite_*/averages/average_ref_001_ite_*.em")
+            )
+        except Exception:
+            candidates = []
         if not candidates:
             return
-        latest = max(candidates, key=lambda p: int(re.findall(r"\d+", p.name)[0]))
-        n = int(re.findall(r"\d+", latest.name)[0])
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        nums = re.findall(r"\d+", latest.name)
+        if not nums:
+            return
+        n = int(nums[-1])
         if n <= self._last_refine_iter:
-            # If we've already displayed this iteration and it is the final
-            # one, we can safely stop monitoring.
-            if n >= max_ite:
+            if self._refine_run_proc and self._refine_run_proc.poll() is not None:
                 self._finish_refinement()
             return
-        avg_dir = latest / "averages"
-        candidates = list(avg_dir.glob("average_ref_001_ite_*.em"))
-        em_path = None
-        for cand in candidates:
-            nums = re.findall(r"\d+", cand.name)
-            if nums and int(nums[-1]) == n:
-                em_path = cand
-                break
-        if em_path is None:
-            return
         try:
-            header, vol = read_em(em_path)
+            header, vol = read_em(latest)
         except Exception:
             return
         self._refined_avg = vol
@@ -1254,7 +1250,9 @@ class TomoViewer(QtWidgets.QWidget):
             slider.blockSignals(False)
             self._update_refined_slice(axis, vol.shape[axis] // 2)
         self._last_refine_iter = n
-        if n >= max_ite or (results / f"ite_{n+1:03d}").exists():
+        if n >= max_ite or (
+            self._refine_run_proc and self._refine_run_proc.poll() is not None
+        ):
             self._finish_refinement()
 
     def _update_refined_slice(self, axis, idx):

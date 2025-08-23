@@ -1143,7 +1143,8 @@ class TomoViewer(QtWidgets.QWidget):
             self._refine_script_path = None
         self._refine_setup_proc = None
         project = self._refine_folder
-        align_dir = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / project
+        align_base = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+        project_dir = align_base / project
         env = os.environ.copy()
         extra = ":".join([
             "/net/nfs1/public/EM/CUDA/cuda-11.8/lib64",
@@ -1156,12 +1157,12 @@ class TomoViewer(QtWidgets.QWidget):
             "/lmb/home/fgao/micromamba/pkgs/libstdcxx-ng-13.1.0-hfd8a6a1_0/lib/",
         ])
         env["PATH"] = env.get("PATH", "") + ":" + extra
-        exe = align_dir / project
+        exe = align_base / f"{project}.exe"
         exe.chmod(exe.stat().st_mode | 0o111)
 
         self._refine_run_proc = subprocess.Popen(
             [str(exe)],
-            cwd=str(align_dir),
+            cwd=str(align_base),
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -1178,7 +1179,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._refine_timer = QtCore.QTimer(self)
         self._refine_timer.setInterval(30000)
         self._refine_timer.timeout.connect(
-            lambda: self._check_refinement_results(align_dir, self._refine_max_ite)
+            lambda: self._check_refinement_results(project_dir, self._refine_max_ite)
         )
         self._refine_timer.start()
 

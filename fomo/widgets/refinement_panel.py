@@ -63,10 +63,21 @@ class RefinementSidePanel(QtWidgets.QSplitter):
 
     # -------- Numerical parameters --------
     def _build_numeric_params_section(self):
+        # Container widget that holds a label and a scroll area with all numeric
+        # parameter widgets.  The scroll area allows the overall panel to be
+        # shorter while still exposing all parameters to the user.
         widget = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(widget)
         v.addWidget(QtWidgets.QLabel("Numerical parameters"))
-        form = QtWidgets.QFormLayout()
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        v.addWidget(scroll)
+
+        form_widget = QtWidgets.QWidget()
+        scroll.setWidget(form_widget)
+        form = QtWidgets.QFormLayout(form_widget)
+
         # 1 Iterations
         self.ite_r1 = QtWidgets.QSpinBox()
         self.ite_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
@@ -207,7 +218,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.exclusion_mode.setCurrentText("No exclusion from averaging and alignment")
         _disable_scroll(self.exclusion_mode)
         form.addRow("Exclusion Mode", self.exclusion_mode)
-        v.addLayout(form)
+
         self.addWidget(widget)
 
     # -------- Live refinement --------

@@ -6,6 +6,8 @@ import concurrent.futures
 from pathlib import Path
 import random
 import tempfile
+import re
+from datetime import datetime
 
 import numpy as np
 import mrcfile
@@ -125,6 +127,16 @@ class TomoViewer(QtWidgets.QWidget):
         self._initial_avg = None
         self._initial_avg_min = None
         self._initial_avg_max = None
+
+        # Refinement state
+        self._refine_setup_proc = None
+        self._refine_run_proc = None
+        self._refine_timer = None
+        self._refined_avg = None
+        self._refined_avg_min = None
+        self._refined_avg_max = None
+        self._last_refine_iter = 0
+        self._refine_folder = None
 
         # Preload metadata before building UI
         self._preload_metadata()
@@ -903,6 +915,9 @@ class TomoViewer(QtWidgets.QWidget):
             slider.blockSignals(False)
             self._update_initial_avg_slice(axis, vol.shape[axis] // 2)
 
+        # Trigger refinement after initial average
+        self._maybe_start_refinement()
+
     def _calculate_initial_average(self):
         """Run dynamo averaging on a random subset of particles."""
         catalogue = Path.cwd() / "fomo_dynamo_catalogue"
@@ -989,6 +1004,218 @@ class TomoViewer(QtWidgets.QWidget):
             label.width(), label.height(), QtCore.Qt.KeepAspectRatio
         )
         label.setPixmap(pix)
+
+    # ---------- Refinement launching ----------
+    def _collect_refinement_params(self):
+        rp = self.refinement_panel
+        box_size = int(self.picking_panel.box_size.value())
+        area_mode_text = rp.area_search_modus_r1.currentText().replace(" ", "")
+        thresh_text = rp.threshold_mode.currentText().replace(" ", "")
+        excl_text = rp.exclusion_mode.currentText().replace(" ", "")
+        sym_text = rp.sym_r1.text().replace(" ", "")
+        param_string = (
+            f"box_{box_size}_it{rp.ite_r1.value()}_ref{rp.nref_r1.value()}_CA{rp.cone_range_r1.value()}_"
+            f"CS{rp.cone_sampling_r1.value()}_AR{rp.inplane_range_r1.value()}_ARS{rp.inplane_sampling_r1.value()}_"
+            f"R{rp.refine_r1.value()}_RF{rp.refine_factor_r1.value()}_HP{rp.high_r1.value()}_"
+            f"LP{rp.low_r1.value()}_S{sym_text}_PD{rp.dim_r1.value()}_"
+            f"SLX{rp.area_search_r1_x.value()}_SLY{rp.area_search_r1_y.value()}_SLZ{rp.area_search_r1_z.value()}_"
+            f"SLW{area_mode_text}_ST{rp.separation_in_tomogram_r1.value()}_BMRA{rp.mra_r1.value()}_"
+            f"TP{rp.threshold_r1.value()}_TM{thresh_text}_EM{excl_text}"
+        )
+
+        area_map = {0: 0, 1: 1, 2: 2, 3: 4}
+        area_mode = area_map[rp.area_search_modus_r1.currentIndex()]
+
+        t_idx = rp.threshold_mode.currentIndex()
+        exc_idx = rp.exclusion_mode.currentIndex()
+        if t_idx == 0:
+            threshold_mode = 0
+        else:
+            threshold_mode = t_idx if exc_idx == 0 else t_idx * 10 + 1
+
+        now = datetime.now()
+        folder = f"{now.strftime('%Y_%m_%d')}_{now.strftime('%H%M')}_{param_string}"
+
+        values = {
+            "box_size": box_size,
+            "ite": rp.ite_r1.value(),
+            "nref": rp.nref_r1.value(),
+            "cone_range": rp.cone_range_r1.value(),
+            "cone_sampling": rp.cone_sampling_r1.value(),
+            "inplane_range": rp.inplane_range_r1.value(),
+            "inplane_sampling": rp.inplane_sampling_r1.value(),
+            "refine": rp.refine_r1.value(),
+            "refine_factor": rp.refine_factor_r1.value(),
+            "high": rp.high_r1.value(),
+            "low": rp.low_r1.value(),
+            "sym": sym_text,
+            "dim": rp.dim_r1.value(),
+            "area_x": rp.area_search_r1_x.value(),
+            "area_y": rp.area_search_r1_y.value(),
+            "area_z": rp.area_search_r1_z.value(),
+            "area_mode": area_mode,
+            "separation": rp.separation_in_tomogram_r1.value(),
+            "mra": rp.mra_r1.value(),
+            "threshold": rp.threshold_r1.value(),
+            "threshold_mode": threshold_mode,
+        }
+        return folder, values
+
+    def _maybe_start_refinement(self):
+        if self._initial_avg is None:
+            return
+        if self._refine_run_proc is not None:
+            return
+        folder, params = self._collect_refinement_params()
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+        align_dir = catalogue / folder
+        if align_dir.exists():
+            return
+        self._refine_folder = folder
+        self._setup_refinement_project(folder, align_dir, params)
+
+    def _setup_refinement_project(self, folder, align_dir, params):
+        script_lines = [
+            "cd('fomo_dynamo_catalogue/alignments');",
+            (
+                f"dcp.new('{folder}','d','../tomograms/merged/','template',"
+                f"'./alignments/average_reference/{params['box_size']}/rawTemplate.em','masks','default','t','../tomograms/merged/merged_crop.tbl','show','0');"
+            ),
+            "dvput('','destination','standalone_gpu');",
+            f"dvput('{folder}','ite_r1',{params['ite']});",
+            f"dvput('{folder}','nref_r1',{params['nref']});",
+            f"dvput('{folder}','cone_range_r1',{params['cone_range']});",
+            f"dvput('{folder}','cone_sampling_r1',{params['cone_sampling']});",
+            f"dvput('{folder}','inplane_range_r1',{params['inplane_range']});",
+            f"dvput('{folder}','inplane_sampling_r1',{params['inplane_sampling']});",
+            f"dvput('{folder}','refine_r1',{params['refine']});",
+            f"dvput('{folder}','refine_factor_r1',{params['refine_factor']});",
+            f"dvput('{folder}','high_r1',{params['high']});",
+            f"dvput('{folder}','low_r1',{params['low']});",
+            f"dvput('{folder}','sym_r1','{params['sym']}');",
+            f"dvput('{folder}','dim_r1',{params['dim']});",
+            f"dvput('{folder}','area_search_r1',[{params['area_x']} {params['area_y']} {params['area_z']}]);",
+            f"dvput('{folder}','area_search_modus_r1',{params['area_mode']});",
+            f"dvput('{folder}','separation_in_tomogram_r1',{params['separation']});",
+            f"dvput('{folder}','mra_r1',{params['mra']});",
+            f"dvput('{folder}','threshold_r1',{params['threshold']});",
+            f"dvput('{folder}','threshold_modus',{params['threshold_mode']});",
+            f"dvunfold('{folder}');",
+        ]
+        with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False) as tf:
+            tf.write("\n".join(script_lines))
+            script_path = tf.name
+
+        dyn_script = Path(__file__).resolve().parent / "dynamo_setup_EDITME.sh"
+        self._refine_setup_proc = QtCore.QProcess(self)
+        self._refine_setup_proc.finished.connect(
+            lambda *_: self._run_refinement(align_dir, folder, script_path, params["ite"])
+        )
+        self._refine_setup_proc.start("bash", [str(dyn_script), script_path])
+
+    def _run_refinement(self, align_dir, folder, script_path, max_ite):
+        Path(script_path).unlink(missing_ok=True)
+        self._refine_setup_proc = None
+        env = QtCore.QProcessEnvironment.systemEnvironment()
+        extra = ":".join([
+            "/net/nfs1/public/EM/CUDA/cuda-11.8/lib64",
+            "/lmb/home/fgao/micromamba/envs/cryocare_11/lib/python3.8/site-packages/nvidia/cublas/lib",
+            "/public/EM/imod/IMOD/lib",
+            "/public/EM/OpenMPI/openmpi-4.0.1/build/lib",
+            "/lmb/home/fgao/scripts/dynamo/MCRLinux/runtime/glnxa64",
+            "/lmb/home/fgao/scripts/dynamo/MCRLinux/bin/glnxa64",
+            "/lmb/home/fgao/micromamba/envs/dynamo/lib",
+            "/lmb/home/fgao/micromamba/pkgs/libstdcxx-ng-13.1.0-hfd8a6a1_0/lib/",
+        ])
+        path = env.value("PATH", "")
+        env.insert("PATH", path + ":" + extra)
+        self._refine_run_proc = QtCore.QProcess(self)
+        self._refine_run_proc.setProcessEnvironment(env)
+        self._refine_run_proc.setWorkingDirectory(str(align_dir))
+        if self._verbose:
+            self._refine_run_proc.readyReadStandardOutput.connect(
+                lambda: sys.stdout.write(
+                    bytes(self._refine_run_proc.readAllStandardOutput()).decode()
+                )
+            )
+        self._refine_run_proc.start(f"./{folder}")
+
+        self._refine_timer = QtCore.QTimer(self)
+        self._refine_timer.setInterval(30000)
+        self._refine_timer.timeout.connect(
+            lambda: self._check_refinement_results(align_dir, max_ite)
+        )
+        self._refine_timer.start()
+
+    def _check_refinement_results(self, align_dir, max_ite):
+        results = align_dir / "results"
+        if not results.exists():
+            return
+        candidates = [p for p in results.iterdir() if p.is_dir() and p.name.startswith("ite")]
+        if not candidates:
+            return
+        latest = max(candidates, key=lambda p: int(re.findall(r"\d+", p.name)[0]))
+        n = int(re.findall(r"\d+", latest.name)[0])
+        if n <= self._last_refine_iter:
+            if n >= max_ite and (results / f"ite_{n+1:03d}").exists():
+                self._finish_refinement()
+            return
+        em_path = latest / f"averages/average_ref_001_ite_{n:03d}.em"
+        try:
+            header, vol = read_em(em_path)
+        except Exception:
+            return
+        self._refined_avg = vol
+        amin = float(vol.min())
+        amax = float(vol.max())
+        amean = float(vol.mean())
+        if amax <= amin:
+            self._refined_avg_min, self._refined_avg_max = amin, amax
+        else:
+            rng = (amax - amin) / 3.0
+            self._refined_avg_min, self._refined_avg_max = (amean - rng, amean + rng)
+        for axis, slider in enumerate(self.refinement_panel.refined_sliders):
+            slider.blockSignals(True)
+            slider.setMinimum(0)
+            slider.setMaximum(vol.shape[axis] - 1)
+            slider.setValue(vol.shape[axis] // 2)
+            slider.valueChanged.connect(
+                lambda val, a=axis: self._update_refined_slice(a, val)
+            )
+            slider.blockSignals(False)
+            self._update_refined_slice(axis, vol.shape[axis] // 2)
+        self._last_refine_iter = n
+        if n >= max_ite or (results / f"ite_{n+1:03d}").exists():
+            self._finish_refinement()
+
+    def _update_refined_slice(self, axis, idx):
+        if self._refined_avg is None:
+            return
+        arr = np.take(self._refined_avg, idx, axis=axis)
+        arr = np.ascontiguousarray(arr)
+        rng = self._refined_avg_max - self._refined_avg_min
+        if rng == 0:
+            rng = 1.0
+        arr = (
+            (arr - self._refined_avg_min) / rng * 255
+        ).clip(0, 255).astype(np.uint8)
+        h, w = arr.shape
+        qimg = QtGui.QImage(arr.data, w, h, w, QtGui.QImage.Format_Grayscale8)
+        label = self.refinement_panel.refined_views[axis]
+        pix = QtGui.QPixmap.fromImage(qimg).scaled(
+            label.width(), label.height(), QtCore.Qt.KeepAspectRatio
+        )
+        label.setPixmap(pix)
+
+    def _finish_refinement(self):
+        if self._refine_timer is not None:
+            self._refine_timer.stop()
+            self._refine_timer = None
+        if self._refine_run_proc is not None:
+            self._refine_run_proc.kill()
+            self._refine_run_proc = None
+        self._refine_folder = None
+        self._last_refine_iter = 0
 
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):

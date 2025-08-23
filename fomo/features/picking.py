@@ -277,8 +277,27 @@ class PickingModeHandler:
                     self.viewer.lbl.adjustSize()
             except Exception:
                 pass
-       # Thread has finished, ensure our references are cleared
+        # Thread has finished, ensure our references are cleared
         self._stop_extraction_thread()
+
+        # After particles are extracted, start a fresh refinement project
+        try:
+            if hasattr(self.viewer, "_clear_refined_views"):
+                self.viewer._clear_refined_views()
+            if hasattr(self.viewer, "_finish_refinement"):
+                self.viewer._finish_refinement()
+            if hasattr(self.viewer, "_collect_refinement_params") and hasattr(
+                self.viewer, "_setup_refinement_project"
+            ):
+                folder, params = self.viewer._collect_refinement_params()
+                catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+                align_dir = catalogue / folder
+                self.viewer._refine_folder = folder
+                self.viewer._setup_refinement_project(folder, align_dir, params)
+        except Exception:
+            pass
+
+
 
 
     def cleanup_empty_model_dirs(self):

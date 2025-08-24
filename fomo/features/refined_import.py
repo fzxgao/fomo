@@ -73,7 +73,7 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
         if not refined_tables:
             raise FileNotFoundError("No refined_table_ref_*.tbl file found")
         path_to_refined_tbl = refined_tables[0]
-        
+
     # ``np.loadtxt`` fails if the table contains complex numbers in unused
     # columns (e.g. ``0+1.2074e-06i``).  Parse the file manually and only
     # convert the columns we care about.
@@ -110,63 +110,66 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
     eulers = np.array(eulers, dtype=float)
     mod_xyz = xyz + shifts
 
-    for tomo in np.unique(tomo_numbers):
-        volume_dir = None
-        for d in path_to_tomograms.iterdir():
-            if d.is_dir() and d.name.startswith(f"volume_{tomo}_"):
-                volume_dir = d
-                break
-        if volume_dir is None:
-            continue
-        idx = np.where(tomo_numbers == tomo)[0]
-        vol_rows = np.hstack((xyz[idx], mod_xyz[idx], eulers[idx]))
-        out_csv = volume_dir / f"refined_volume_{tomo}_xyz_abg.csv"
-        np.savetxt(out_csv, vol_rows, fmt="%.6f", delimiter=",")
-
-        # Map original coords from raw_*.tbl to filament numbers using nested lookups
-        mapping = {}
-        for raw_file in volume_dir.glob("raw_*.tbl"):
-            m = re.match(r"raw_(\d+)\.tbl", raw_file.name)
-            if not m:
+    if path_to_tomograms.is_dir():
+        for tomo in np.unique(tomo_numbers):
+            volume_dir = None
+            for d in path_to_tomograms.iterdir():
+                if d.is_dir() and d.name.startswith(f"volume_{tomo}_"):
+                    volume_dir = d
+                    break
+            if volume_dir is None:
                 continue
-            filament = m.group(1)
-            if verbose:
-                print(f"[refined] scanning {raw_file}")
-            with open(raw_file) as rf:
-                for line in rf:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    parts = line.split()
-                    try:
-                        x, y, z = map(float, parts[23:26])
-                    except (ValueError, IndexError):
-                        continue
-                    x_key, y_key, z_key = (_normalize_coord(c) for c in (x, y, z))
-                    mapping.setdefault(x_key, {}).setdefault(y_key, {})[z_key] = filament
+            idx = np.where(tomo_numbers == tomo)[0]
+            vol_rows = np.hstack((xyz[idx], mod_xyz[idx], eulers[idx]))
+            out_csv = volume_dir / f"refined_volume_{tomo}_xyz_abg.csv"
+            np.savetxt(out_csv, vol_rows, fmt="%.6f", delimiter=",")
 
-        per_filament = {}
-        for i in idx:
-            x_key, y_key, z_key = (_normalize_coord(c) for c in xyz[i])
-            filament = (
-                mapping.get(x_key, {})
-                .get(y_key, {})
-                .get(z_key)
-            )
-            if filament is None:
+            # Map original coords from raw_*.tbl to filament numbers using nested lookups
+            mapping = {}
+            for raw_file in volume_dir.glob("raw_*.tbl"):
+                m = re.match(r"raw_(\d+)\.tbl", raw_file.name)
+                if not m:
+                    continue
+                filament = m.group(1)
                 if verbose:
-                    print(f"[refined] no match for {(x_key, y_key, z_key)}")
-                continue
-            if verbose:
-                print(
-                    f"[refined] matched {(x_key, y_key, z_key)} to filament {filament}"
+                    print(f"[refined] scanning {raw_file}")
+                with open(raw_file) as rf:
+                    for line in rf:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        parts = line.split()
+                        try:
+                            x, y, z = map(float, parts[23:26])
+                        except (ValueError, IndexError):
+                            continue
+                        x_key, y_key, z_key = (_normalize_coord(c) for c in (x, y, z))
+                        mapping.setdefault(x_key, {}).setdefault(y_key, {})[z_key] = filament
+
+            per_filament = {}
+            for i in idx:
+                x_key, y_key, z_key = (_normalize_coord(c) for c in xyz[i])
+                filament = (
+                    mapping.get(x_key, {})
+                    .get(y_key, {})
+                    .get(z_key)
                 )
-            per_filament.setdefault(filament, []).append(
-                np.concatenate((xyz[i], mod_xyz[i], eulers[i]))
-            )
-        for filament, rows in per_filament.items():
-            out = volume_dir / f"refined_xyz_{filament}.csv"
-            np.savetxt(out, np.array(rows), fmt="%.6f", delimiter=",")
+                if filament is None:
+                    if verbose:
+                        print(f"[refined] no match for {(x_key, y_key, z_key)}")
+                    continue
+                if verbose:
+                    print(
+                        f"[refined] matched {(x_key, y_key, z_key)} to filament {filament}"
+                    )
+                per_filament.setdefault(filament, []).append(
+                    np.concatenate((xyz[i], mod_xyz[i], eulers[i]))
+                )
+            for filament, rows in per_filament.items():
+                out = volume_dir / f"refined_xyz_{filament}.csv"
+                np.savetxt(out, np.array(rows), fmt="%.6f", delimiter=",")
+    elif verbose:
+        print("[refined] tomograms directory not found; skipping coordinate export")
 
     return path_to_tomograms, path_to_refined_tbl
 

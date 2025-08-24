@@ -252,8 +252,14 @@ def run_ransac_pipeline(
     # Write input DOC
     doc_in = base_prefix.with_suffix('.doc')
     filename_for_row = _default_filename_for_row_factory(project_root)
-    _write_mltomo_doc(rows, filename_for_row, doc_in)
+    fname_map: Dict[str, List[float]] = {}
 
+    def filename_for_row_with_map(i: int, row: List[float]) -> str:
+        fname = filename_for_row(i, row)
+        fname_map[fname] = row
+        return fname
+
+    _write_mltomo_doc(rows, filename_for_row_with_map, doc_in)
     # Run RANSAC (if executable provided or available on PATH)
     doc_out = base_prefix.with_name(base_prefix.name + '_RANSAC').with_suffix('.doc')
     log_path = base_prefix.with_name(base_prefix.name + '_RANSAC.log')

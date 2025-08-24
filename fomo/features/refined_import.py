@@ -34,9 +34,21 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
     if not alignment_dirs:
         raise FileNotFoundError("No alignments directory found")
 
-    def _dt_key(p: Path) -> str:
-        parts = p.name.split("_", 2)
-        return parts[0] + parts[1]
+    def _dt_key(p: Path) -> tuple[int, int, int, int]:
+        """Return sortable key for alignment directories.
+
+        Alignment folders may be named like ``YYYY_MM_DD_TIME_parameters``.
+        Extract up to the first four numeric components so we can identify
+        the most recent directory regardless of the parameter suffix.
+        """
+
+        parts = p.name.split("_")
+        vals = []
+        for part in parts[:4]:
+            digits = re.sub(r"\D", "", part)
+            vals.append(int(digits) if digits else 0)
+        vals += [0] * (4 - len(vals))
+        return tuple(vals)
 
     latest_alignment = max(alignment_dirs, key=_dt_key)
 

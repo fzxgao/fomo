@@ -25,6 +25,7 @@ from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
+from fomo.features.ransac_pipeline import run_ransac_pipeline
 
 # ---------------- Utility ----------------
 def list_mrcs(path):
@@ -138,6 +139,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._last_refine_iter = -1
         self._refine_folder = None
         self._defer_refine_display = False
+        self._refined_tbl_path = None
 
         # Preload metadata before building UI
         self._preload_metadata()
@@ -178,6 +180,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.side_panel.setCurrentWidget(self.refinement_panel)
         h.addWidget(self.side_panel)
         self.refinement_panel.import_btn.clicked.connect(self._import_refined)
+        self.refinement_panel.ransac_btn.clicked.connect(self._run_ransac)
         self.refinement_panel.export_relion_btn.clicked.connect(self._export_relion)
         self.refinement_panel.calc_initial_btn.clicked.connect(self._calculate_initial_average)
         self.picking_panel.import_btn.clicked.connect(self._import_refined)
@@ -870,11 +873,25 @@ class TomoViewer(QtWidgets.QWidget):
     def _import_refined(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue"
         try:
-            import_refined_coordinates(catalogue, verbose=self._verbose)
+            _, self._refined_tbl_path = import_refined_coordinates(catalogue, verbose=self._verbose)
             self._load_refined_models_for_file()
         except Exception as e:
             if self._verbose:
                 print(f"[refined] import failed: {e}")
+
+    def _run_ransac(self):
+        if not self._refined_tbl_path:
+            if self._verbose:
+                print("[ransac] no refined table available")
+            return
+        project_root = Path.cwd()
+        ransac_bin = Path(__file__).resolve().parent / "RANSAC" / "bin" / "ransac"
+        try:
+            _, _, _, tbl_out = run_ransac_pipeline(project_root, self._refined_tbl_path, self._refined_tbl_path, ransac_bin=ransac_bin)
+            self._refined_tbl_path = tbl_out
+        except Exception as e:
+            if self._verbose:
+                print(f"[ransac] failed: {e}")
 
     def _export_relion(self):
         if self._verbose:

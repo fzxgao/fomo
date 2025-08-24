@@ -275,6 +275,8 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.import_right.setArrowType(QtCore.Qt.RightArrow)
         import_row.addWidget(self.import_right)
         btns.addLayout(import_row)
+        self.ransac_btn = QtWidgets.QPushButton("Run RANSAC")
+        btns.addWidget(self.ransac_btn)
         self.export_relion_btn = QtWidgets.QPushButton("Export to RELION")
         btns.addWidget(self.export_relion_btn)
         v.addLayout(btns)

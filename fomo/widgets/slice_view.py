@@ -39,6 +39,9 @@ class SliceView(QtWidgets.QGraphicsView):
         self._wheel_last_ts = 0.0
         self._wheel_streak = 0
 
+        self._picking_mode = False
+        self._tmp_drag_mode = None
+
     def set_image(self, qimg):
         self.img_w = qimg.width()
         self.img_h = qimg.height()
@@ -60,6 +63,7 @@ class SliceView(QtWidgets.QGraphicsView):
 
     def set_cursor_mode(self, picking):
         """Switch between hand-drag and normal arrow cursor for picking mode."""
+        self._picking_mode = picking
         if picking:
             self.setDragMode(QtWidgets.QGraphicsView.NoDrag)
             self.viewport().setCursor(QtCore.Qt.ArrowCursor)
@@ -111,10 +115,18 @@ class SliceView(QtWidgets.QGraphicsView):
     def mousePressEvent(self, ev):
         if ev.button() == QtCore.Qt.LeftButton:
             pos = self.mapToScene(ev.pos())
-            x = int(np.clip(round(pos.x()), 0, self.img_w - 1))
-            y = int(np.clip(round(pos.y()), 0, self.img_h - 1))
-            self.clicked.emit(x, y)
-            self._drag_active = True
+            x_f, y_f = pos.x(), pos.y()
+            if 0 <= x_f < self.img_w and 0 <= y_f < self.img_h:
+                x = int(np.clip(round(x_f), 0, self.img_w - 1))
+                y = int(np.clip(round(y_f), 0, self.img_h - 1))
+                self.clicked.emit(x, y)
+                self._drag_active = True
+            else:
+                if self._picking_mode:
+                    self._tmp_drag_mode = self.dragMode()
+                    self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+                super().mousePressEvent(ev)
+                return
         super().mousePressEvent(ev)
 
     def mouseMoveEvent(self, ev):
@@ -130,3 +142,9 @@ class SliceView(QtWidgets.QGraphicsView):
             self._drag_active = False
             self.released.emit()
         super().mouseReleaseEvent(ev)
+        if self._tmp_drag_mode is not None:
+            if self._picking_mode:
+                self.setDragMode(QtWidgets.QGraphicsView.NoDrag)
+            else:
+                self.setDragMode(self._tmp_drag_mode)
+            self._tmp_drag_mode = None

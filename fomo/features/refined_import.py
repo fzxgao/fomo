@@ -65,12 +65,15 @@ def import_refined_coordinates(input_dir: str, verbose: bool = False) -> Tuple[P
 
     latest_ite = max(ite_dirs, key=_ite_key)
     averages_dir = latest_ite / "averages"
-    refined_tables = list(averages_dir.glob("refined_table_ref_*_ite_*.tbl"))
-    if not refined_tables:
-        raise FileNotFoundError("No refined_table_ref_*.tbl file found")
-
-    path_to_refined_tbl = refined_tables[0]
-
+    ransac_tables = sorted(averages_dir.glob("refined_table_ref_*_ite_*_RANSAC.tbl"))
+    if ransac_tables:
+        path_to_refined_tbl = ransac_tables[0]
+    else:
+        refined_tables = sorted(averages_dir.glob("refined_table_ref_*_ite_*.tbl"))
+        if not refined_tables:
+            raise FileNotFoundError("No refined_table_ref_*.tbl file found")
+        path_to_refined_tbl = refined_tables[0]
+        
     # ``np.loadtxt`` fails if the table contains complex numbers in unused
     # columns (e.g. ``0+1.2074e-06i``).  Parse the file manually and only
     # convert the columns we care about.

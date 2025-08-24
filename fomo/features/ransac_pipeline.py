@@ -160,6 +160,26 @@ def _read_doc_euler_shifts(doc_path: Path) -> List[Tuple[float, float, float, fl
             vals.append((phi, theta, psi, X, Y, Z))
     return vals
 
+def _read_doc_with_filenames(doc_path: Path) -> List[Tuple[str, Tuple[float, float, float, float, float, float]]]:
+    """Return list of (filename, (φ,θ,ψ,X,Y,Z)) tuples from a DOC file."""
+    entries: List[Tuple[str, Tuple[float, float, float, float, float, float]]] = []
+    current_name: Optional[str] = None
+    with doc_path.open("r") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(";"):
+                current_name = line[1:].strip()
+                continue
+            parts = [p for p in line.split() if p]
+            if current_name and len(parts) >= 8:
+                phi, theta, psi = map(float, parts[2:5])
+                X, Y, Z = map(float, parts[5:8])
+                entries.append((current_name, (phi, theta, psi, X, Y, Z)))
+            current_name = None
+    return entries
+
 def _default_filename_for_row_factory(project_root: Path):
     """
     Provide a stable, human-readable filename to print after ';' in the DOC.
@@ -201,12 +221,13 @@ def run_ransac_pipeline(
       2) build (tomo, xyz)->(fil,seg) map from raw_###.tbl files,
       3) write DOC and SPI,
       4) run RANSAC with -S (non-fixed segments),
-      5) write updated .tbl with refined (dx,dy,dz,tdrot,tilt,narot).
+      5) write updated ``*_RANSAC.tbl`` containing only inlier rows.
 
     Returns: (doc_in, spi_indices, doc_out, tbl_out)
     """
     out_prefix = Path(out_prefix)
-    out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    base_prefix = out_prefix.with_suffix("") if out_prefix.suffix else out_prefix
+    base_prefix.parent.mkdir(parents=True, exist_ok=True)
 
     rows = _parse_dynamo_tbl(refined_tbl_path)
 
@@ -225,17 +246,17 @@ def run_ransac_pipeline(
         order.append((tomo, xyz))
 
     # Write SPI indices
-    spi_path = out_prefix.with_suffix('.indices.spi')
+    spi_path = base_prefix.with_suffix('.indices.spi')
     _write_indices_spi(order, global_map, spi_path)
 
     # Write input DOC
-    doc_in = out_prefix.with_suffix('.doc')
+    doc_in = base_prefix.with_suffix('.doc')
     filename_for_row = _default_filename_for_row_factory(project_root)
     _write_mltomo_doc(rows, filename_for_row, doc_in)
 
     # Run RANSAC (if executable provided or available on PATH)
-    doc_out = out_prefix.with_name(out_prefix.name + '_ransac').with_suffix('.doc')
-    log_path = out_prefix.with_name(out_prefix.name + '_ransac.log')
+    doc_out = base_prefix.with_name(base_prefix.name + '_RANSAC').with_suffix('.doc')
+    log_path = base_prefix.with_name(base_prefix.name + '_RANSAC.log')
 
     if ransac_bin is None:
         # infer RANSAC binary relative to packaged tutorial doc
@@ -261,20 +282,21 @@ def run_ransac_pipeline(
 
     # If we produced an output doc, read it and update the refined table columns
     if doc_out.exists():
-        six = _read_doc_euler_shifts(doc_out)
-        if len(six) != len(rows):
-            raise ValueError("Output DOC length does not match input table.")
-        updated = []
-        for r, (phi, theta, psi, X, Y, Z) in zip(rows, six):
-            r2 = list(r)
-            # update dx,dy,dz (cols 4..6) and tdrot,tilt,narot (cols 7..9)
+        entries = _read_doc_with_filenames(doc_out)
+        updated: List[List[float]] = []
+        for fname, (phi, theta, psi, X, Y, Z) in entries:
+            orig = fname_map.get(fname)
+            if orig is None:
+                continue
+            r2 = list(orig)
             r2[3], r2[4], r2[5] = X, Y, Z
             r2[6], r2[7], r2[8] = phi, theta, psi
             updated.append(r2)
-        tbl_out = out_prefix.with_name(out_prefix.name + '_ransac').with_suffix('.tbl')
+        tbl_out = base_prefix.with_name(base_prefix.name + '_RANSAC').with_suffix('.tbl')
         _write_dynamo_tbl(updated, tbl_out)
     else:
         tbl_out = out_prefix.with_name(out_prefix.name + '_pending').with_suffix('.tbl')
+        tbl_out = base_prefix.with_name(base_prefix.name + '_RANSAC_pending').with_suffix('.tbl')
         # No changes because RANSAC wasn't run; write an untouched copy
         _write_dynamo_tbl(rows, tbl_out)
 

@@ -193,7 +193,7 @@ def run_ransac_pipeline(
     refined_tbl_path: Path,
     out_prefix: Path,
     ransac_bin: Optional[Path] = None,
-    extra_ransac_args: Optional[List[str]] = None,
+    extra_ransac_args: Optional[List[str]] = ["-d", "6"],
 ) -> Tuple[Path, Path, Path, Path]:
     """
     End-to-end:

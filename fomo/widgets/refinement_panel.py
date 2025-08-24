@@ -215,7 +215,26 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         _disable_scroll(self.exclusion_mode)
         form.addRow("Exclusion Mode", self.exclusion_mode)
 
+        # Ensure text inputs and dropdowns expand to the panel width
+        growing = form_widget.findChildren(
+            (QtWidgets.QLineEdit, QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox)
+        )
+        for w in growing:
+            if w in (
+                self.area_search_r1_x,
+                self.area_search_r1_y,
+                self.area_search_r1_z,
+            ):
+                continue
+            if isinstance(w, QtWidgets.QComboBox):
+                w.setMinimumContentsLength(0)
+                w.setSizeAdjustPolicy(
+                    QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+                )
+            w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
         scroll = QtWidgets.QScrollArea()
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         scroll.setWidget(form_widget)

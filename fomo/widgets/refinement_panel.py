@@ -177,7 +177,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         #15 Separation in Tomogram
         self.separation_in_tomogram_r1 = QtWidgets.QSpinBox()
         self.separation_in_tomogram_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.separation_in_tomogram_r1.setValue(20)
+        self.separation_in_tomogram_r1.setValue(2)
         _disable_scroll(self.separation_in_tomogram_r1)
         form.addRow("Separation in Tomogram", self.separation_in_tomogram_r1)
         #16 Basic MRA

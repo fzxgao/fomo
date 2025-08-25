@@ -8,6 +8,7 @@ import random
 import tempfile
 import re
 from datetime import datetime
+import shutil
 
 import numpy as np
 import mrcfile
@@ -149,6 +150,8 @@ class TomoViewer(QtWidgets.QWidget):
         self.top_split.installEventFilter(self)
         self.load_file(self.idx)
         self._load_latest_refined_average()
+        self._ransac_loaded = self._check_ransac_present()
+        self._update_ransac_button()
 
     # ---------- Verbose window resize ----------
     def resizeEvent(self, event):
@@ -180,7 +183,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.side_panel.setCurrentWidget(self.refinement_panel)
         h.addWidget(self.side_panel)
         self.refinement_panel.import_btn.clicked.connect(self._import_refined)
-        self.refinement_panel.ransac_btn.clicked.connect(self._run_ransac)
+        self.refinement_panel.ransac_btn.clicked.connect(self._toggle_ransac)
         self.refinement_panel.export_relion_btn.clicked.connect(self._export_relion)
         self.refinement_panel.calc_initial_btn.clicked.connect(self._calculate_initial_average)
         self.picking_panel.import_btn.clicked.connect(self._import_refined)
@@ -615,6 +618,33 @@ class TomoViewer(QtWidgets.QWidget):
         self.models.clear()
         self.picking_panel.model_list.clear()
 
+    def _clear_refined_models(self):
+        """Remove refined coordinate models from the viewer without deleting files."""
+        scene = self.view_xy.scene()
+        keep_models = []
+        keep_items = []
+        names_to_remove = []
+        for model, items in zip(self.models, self._model_items):
+            path = model.get("path")
+            name = model.get("name")
+            if path is not None and path.suffix == ".csv" and path.name.startswith("refined"):
+                for item in items:
+                    try:
+                        scene.removeItem(item)
+                    except Exception:
+                        pass
+                names_to_remove.append(name)
+            else:
+                keep_models.append(model)
+                keep_items.append(items)
+        self.models = keep_models
+        self._model_items = keep_items
+        for name in names_to_remove:
+            items = self.picking_panel.model_list.findItems(name, QtCore.Qt.MatchExactly)
+            for item in items:
+                row = self.picking_panel.model_list.row(item)
+                self.picking_panel.model_list.takeItem(row)
+
     def add_model(self, tbl_path, points, vectors=None):
         path = Path(tbl_path) if tbl_path is not None else None
         name = path.name if path is not None else "model"
@@ -870,6 +900,21 @@ class TomoViewer(QtWidgets.QWidget):
                 self.add_model(rcsv, pts, vecs)
             except Exception:
                 continue
+    def _check_ransac_present(self) -> bool:
+        root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not root_dir.exists():
+            return False
+        return any(root_dir.rglob("refined_RANSAC_xyz_*.csv"))
+
+    def _update_ransac_button(self):
+        text = "Delete RANSAC coords" if getattr(self, "_ransac_loaded", False) else "Run RANSAC"
+        self.refinement_panel.ransac_btn.setText(text)
+
+    def _toggle_ransac(self):
+        if getattr(self, "_ransac_loaded", False):
+            self._delete_ransac_coords()
+        else:
+            self._run_ransac()
 
     def _import_refined(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue"
@@ -893,7 +938,7 @@ class TomoViewer(QtWidgets.QWidget):
         project_root = Path.cwd()
         ransac_bin = Path(__file__).resolve().parent / "RANSAC" / "bin" / "ransac"
         try:
-            self._clear_models()
+            self._clear_refined_models()
             _, _, _, _ = run_ransac_pipeline(
                 project_root,
                 self._refined_tbl_path,
@@ -905,9 +950,38 @@ class TomoViewer(QtWidgets.QWidget):
                 catalogue, verbose=self._verbose, use_ransac=True
             )
             self._load_refined_models_for_file(use_ransac=True)
+            self._ransac_loaded = True
+            self._update_ransac_button()
         except Exception as e:
             if self._verbose:
                 print(f"[ransac] failed: {e}")
+
+    def _delete_ransac_coords(self):
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue"
+        align_root = catalogue / "alignments"
+        for path in align_root.rglob("*"):
+            try:
+                if path.is_dir():
+                    if "RANSAC" in path.name:
+                        shutil.rmtree(path, ignore_errors=True)
+                else:
+                    if path.suffix in {".spi", ".doc"} or "RANSAC" in path.name:
+                        path.unlink()
+            except Exception as e:
+                if self._verbose:
+                    print(f"[ransac.delete] failed to remove {path}: {e}")
+        tomo_root = catalogue / "tomograms"
+        for rcsv in tomo_root.rglob("refined_RANSAC*.csv"):
+            try:
+                rcsv.unlink()
+            except Exception as e:
+                if self._verbose:
+                    print(f"[ransac.delete] failed to remove {rcsv}: {e}")
+        self._clear_refined_models()
+        self._import_refined()
+        self._ransac_loaded = False
+        self._update_ransac_button()
+
 
     def _export_relion(self):
         if self._verbose:

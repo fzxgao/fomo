@@ -879,14 +879,17 @@ class TomoViewer(QtWidgets.QWidget):
             )
             self._load_refined_models_for_file(use_ransac=False)
         except Exception as e:
+            self._refined_tbl_path = None
             if self._verbose:
                 print(f"[refined] import failed: {e}")
 
     def _run_ransac(self):
         if not self._refined_tbl_path:
-            if self._verbose:
-                print("[ransac] no refined table available")
-            return
+            self._import_refined()
+            if not self._refined_tbl_path:
+                if self._verbose:
+                    print("[ransac] no refined table available")
+                return
         project_root = Path.cwd()
         ransac_bin = Path(__file__).resolve().parent / "RANSAC" / "bin" / "ransac"
         try:

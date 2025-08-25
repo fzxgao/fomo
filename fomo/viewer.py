@@ -844,7 +844,7 @@ class TomoViewer(QtWidgets.QWidget):
                 continue
             self.add_model(tbl, coords)
 
-    def _load_refined_models_for_file(self):
+    def _load_refined_models_for_file(self, use_ransac: bool = False):
         tomogram_path = Path(self.files[self.idx])
         tomogram_name = tomogram_path.stem
         root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
@@ -857,7 +857,8 @@ class TomoViewer(QtWidgets.QWidget):
                 break
         if target_dir is None:
             return
-        for rcsv in sorted(target_dir.glob("refined_xyz_*.csv")):
+        pattern = "refined_RANSAC_xyz_*.csv" if use_ransac else "refined_xyz_*.csv"
+        for rcsv in sorted(target_dir.glob(pattern)):
             try:
                 arr = np.loadtxt(rcsv, delimiter=",")
                 arr = np.atleast_2d(arr)
@@ -873,8 +874,10 @@ class TomoViewer(QtWidgets.QWidget):
     def _import_refined(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue"
         try:
-            _, self._refined_tbl_path = import_refined_coordinates(catalogue, verbose=self._verbose)
-            self._load_refined_models_for_file()
+            _, self._refined_tbl_path = import_refined_coordinates(
+                catalogue, verbose=self._verbose, use_ransac=False
+            )
+            self._load_refined_models_for_file(use_ransac=False)
         except Exception as e:
             if self._verbose:
                 print(f"[refined] import failed: {e}")
@@ -887,8 +890,18 @@ class TomoViewer(QtWidgets.QWidget):
         project_root = Path.cwd()
         ransac_bin = Path(__file__).resolve().parent / "RANSAC" / "bin" / "ransac"
         try:
-            _, _, _, tbl_out = run_ransac_pipeline(project_root, self._refined_tbl_path, self._refined_tbl_path, ransac_bin=ransac_bin)
-            self._refined_tbl_path = tbl_out
+            self._clear_models()
+            _, _, _, _ = run_ransac_pipeline(
+                project_root,
+                self._refined_tbl_path,
+                self._refined_tbl_path,
+                ransac_bin=ransac_bin,
+            )
+            catalogue = Path.cwd() / "fomo_dynamo_catalogue"
+            _, self._refined_tbl_path = import_refined_coordinates(
+                catalogue, verbose=self._verbose, use_ransac=True
+            )
+            self._load_refined_models_for_file(use_ransac=True)
         except Exception as e:
             if self._verbose:
                 print(f"[ransac] failed: {e}")

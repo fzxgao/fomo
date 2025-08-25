@@ -9,6 +9,7 @@ import tempfile
 import re
 from datetime import datetime
 import shutil
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import mrcfile
@@ -26,6 +27,7 @@ from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
+from fomo.features import export_relion_clean_stars
 from fomo.features.ransac_pipeline import run_ransac_pipeline
 
 # ---------------- Utility ----------------
@@ -984,8 +986,11 @@ class TomoViewer(QtWidgets.QWidget):
 
 
     def _export_relion(self):
-        if self._verbose:
-            print("[refined] export to RELION not implemented")
+        try:
+            export_relion_clean_stars(Path.cwd(), verbose=self._verbose)
+        except Exception as e:
+            if self._verbose:
+                print(f"[relion] export failed: {e}")
 
     def _load_latest_initial_average(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / "average_reference"

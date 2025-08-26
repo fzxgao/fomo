@@ -1,9 +1,9 @@
 import re
+import subprocess
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from typing import Iterable
 import numpy as np
-
 
 def _get_param(root: ET.Element, section: str, name: str, cast=float):
     """Helper to fetch numeric parameters from Warp settings XML."""
@@ -90,7 +90,8 @@ def export_relion_clean_stars(root_dir: Path | str = Path.cwd(), *, verbose: boo
             if verbose:
                 print(f"[relion] no refined coordinates found for {tomo_dir.name}")
             continue
-        micrograph = f"{name_part}.tomostar"
+        micrograph_base = re.sub(r"_[0-9.]+Apx$", "", name_part)
+        micrograph = f"{micrograph_base}.tomostar"
         star_path = out_dir / f"{name_part}_clean.star"
         with open(star_path, "w") as fh:
             fh.write("data_\n\nloop_\n")
@@ -108,3 +109,58 @@ def export_relion_clean_stars(root_dir: Path | str = Path.cwd(), *, verbose: boo
                 fh.write(f"{r} {micrograph} 10\n")
         if verbose:
             print(f"[relion] wrote {star_path} ({len(rows)} particles)")
+
+def export_relion(
+    root_dir: Path | str = Path.cwd(),
+    *,
+    output_angpix: float = 4.0,
+    warpbox: int = 100,
+    warp_diameter: int = 140,
+    verbose: bool = False,
+) -> None:
+    """Run WarpTools to export particles for RELION.
+    This function creates ``*_clean.star`` files and then calls
+    ``WarpTools ts_export_particles`` to generate ``matching.star`` and the
+    corresponding particle stacks.
+    """
+
+    root = Path(root_dir)
+
+    # Create *_clean.star files from refined coordinates
+    export_relion_clean_stars(root, verbose=verbose)
+    
+    # Find WarpTools executable in common conda/mamba locations
+    roots = ["micromamba", "mamba", "anaconda3", "miniconda3", ".local/share/micromamba"]
+    try:
+        for root in roots:
+            exe = Path.home() / root / "envs" / "warp" / "bin" / "WarpTools"
+            if exe.exists():
+                warp_executable=str(exe)
+                return
+    except FileNotFoundError:
+        print(
+            f"WarpTools not found in micromamba/mamba/conda/miniconda envs, assuming WarpTools is installed in the fomo environment. If not, please install Warp using your preferred python package and environment manager and try again."
+        )
+        warp_executable="WarpTools"
+    # Ensure output directory exists
+    (root / "relion").mkdir(parents=True, exist_ok=True)
+    print(f"WarpTools executable: {warp_executable}")
+    cmd = (
+        f"{warp_executable} ts_export_particles "
+        "--settings warp_tiltseries.settings "
+        "--input_directory warp_tiltseries/matching "
+        '--input_pattern "*_clean.star" '
+        "--normalized_coords "
+        "--output_star relion/matching.star "
+        f"--output_angpix {output_angpix} "
+        f"--box {warpbox} "
+        f"--diameter {warp_diameter} "
+        "--relative_output_paths "
+        "--2d"
+    )
+    
+    subprocess.run(["bash", "-lc", cmd], check=True, cwd=root)
+
+
+    if verbose:
+       print("[relion] ran WarpTools ts_export_particles")

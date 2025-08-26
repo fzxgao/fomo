@@ -131,17 +131,17 @@ def export_relion(
     
     # Find WarpTools executable in common conda/mamba locations
     roots = ["micromamba", "mamba", "anaconda3", "miniconda3", ".local/share/micromamba"]
+    warp_executable = "WarpTools"
     try:
-        for root in roots:
-            exe = Path.home() / root / "envs" / "warp" / "bin" / "WarpTools"
+        for env_root in roots:
+            exe = Path.home() / env_root / "envs" / "warp" / "bin" / "WarpTools"
             if exe.exists():
-                warp_executable=str(exe)
-                return
+                warp_executable = str(exe)
+                break
     except FileNotFoundError:
         print(
             f"WarpTools not found in micromamba/mamba/conda/miniconda envs, assuming WarpTools is installed in the fomo environment. If not, please install Warp using your preferred python package and environment manager and try again."
         )
-        warp_executable="WarpTools"
     # Ensure output directory exists
     (root / "relion").mkdir(parents=True, exist_ok=True)
     print(f"WarpTools executable: {warp_executable}")

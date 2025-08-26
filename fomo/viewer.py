@@ -27,7 +27,7 @@ from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
-from fomo.features import export_relion_clean_stars
+from fomo.features.export_relion import export_relion
 from fomo.features.ransac_pipeline import run_ransac_pipeline
 
 # ---------------- Utility ----------------
@@ -987,7 +987,7 @@ class TomoViewer(QtWidgets.QWidget):
 
     def _export_relion(self):
         try:
-            export_relion_clean_stars(Path.cwd(), verbose=self._verbose)
+            export_relion(Path.cwd(), verbose=self._verbose)
         except Exception as e:
             if self._verbose:
                 print(f"[relion] export failed: {e}")

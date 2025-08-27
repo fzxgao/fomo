@@ -4,6 +4,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from typing import Iterable
 import numpy as np
+from eulerangles import convert_eulers
 
 def _get_param(root: ET.Element, section: str, name: str, cast=float):
     """Helper to fetch numeric parameters from Warp settings XML."""
@@ -78,6 +79,7 @@ def export_relion_clean_stars(root_dir: Path | str = Path.cwd(), *, verbose: boo
                 continue
             coords = data[:, 3:6]  # refined coordinates
             eulers = data[:, 6:9]
+            eulers = convert_eulers(eulers, source_meta="dynamo", target_meta="relion")
             norm_x = coords[:, 0] / tomo_dim_xy
             norm_y = coords[:, 1] / tomo_dim_xy
             norm_z = coords[:, 2] / tomo_dim_z

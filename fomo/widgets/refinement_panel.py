@@ -140,7 +140,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         #12 Particle Dimensions
         self.dim_r1 = QtWidgets.QSpinBox()
         self.dim_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.dim_r1.setValue(40)
+        self.dim_r1.setValue(52)
         _disable_scroll(self.dim_r1)
         form.addRow("Particle Dimensions", self.dim_r1)
         #13 Shift limits

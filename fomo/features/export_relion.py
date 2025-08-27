@@ -155,28 +155,34 @@ def export_relion(
     # Ensure output directory exists
     (root / "relion").mkdir(parents=True, exist_ok=True)
     print(f"WarpTools executable: {warp_executable}")
-    cmd = (
-        f"{warp_executable} ts_export_particles "
-        "--settings warp_tiltseries.settings "
-        "--input_directory warp_tiltseries/matching "
-        '--input_pattern "*_clean.star" '
-        "--normalized_coords "
-        "--output_star relion/matching.star "
-        f"--output_angpix {output_angpix} "
-        f"--box {warpbox} "
-        f"--diameter {warp_diameter} "
-        "--relative_output_paths "
-        "--2d"
-    )
-    # Run WarpTools in a pseudo-terminal. If the process is suspended with a
-    # "Stopped (tty input)" message, automatically resume it by sending "fg".
+    cmd = [
+        warp_executable,
+        "ts_export_particles",
+        "--settings",
+        "warp_tiltseries.settings",
+        "--input_directory",
+        "warp_tiltseries/matching",
+        "--input_pattern",
+        "*_clean.star",
+        "--normalized_coords",
+        "--output_star",
+        "relion/matching.star",
+        "--output_angpix",
+        str(output_angpix),
+        "--box",
+        str(warpbox),
+        "--diameter",
+        str(warp_diameter),
+        "--relative_output_paths",
+        "--2d",
+    ]
 
-    child = pexpect.spawn(cmd[0], cmd[1:], cwd=str(root))
-    child.logfile = sys.stdout.buffer
+    child = pexpect.spawn(cmd[0], cmd[1:], cwd=str(root), encoding="utf-8")
+    child.logfile = sys.stdout
     child.expect(pexpect.EOF)
-    child.close()
-    if child.exitstatus:
-        raise subprocess.CalledProcessError(child.exitstatus, cmd)
+    rc = child.wait()
+    if rc:
+        raise subprocess.CalledProcessError(rc, " ".join(cmd))
 
     if verbose:
        print("[relion] ran WarpTools ts_export_particles")

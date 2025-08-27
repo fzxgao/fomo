@@ -1,9 +1,17 @@
 import re
 import subprocess
+import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from typing import Iterable
 import numpy as np
+import pexpect
+
+# NumPy 1.24. Define it here for compatibility with newer versions *before*
+# importing ``eulerangles`` so it can access the alias during module import.
+if not hasattr(np, "float"):
+    np.float = float
+    
 from eulerangles import convert_eulers
 
 def _get_param(root: ET.Element, section: str, name: str, cast=float):
@@ -160,9 +168,15 @@ def export_relion(
         "--relative_output_paths "
         "--2d"
     )
-    
-    subprocess.run(["bash", "-lc", cmd], check=True, cwd=root)
+    # Run WarpTools in a pseudo-terminal. If the process is suspended with a
+    # "Stopped (tty input)" message, automatically resume it by sending "fg".
 
+    child = pexpect.spawn("bash", ["-lc", cmd], cwd=str(root), encoding="utf-8")
+    child.logfile = sys.stdout
+    child.expect(pexpect.EOF)
+    rc = child.wait()
+    if rc:
+        raise subprocess.CalledProcessError(rc, cmd)
 
     if verbose:
        print("[relion] ran WarpTools ts_export_particles")

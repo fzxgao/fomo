@@ -179,7 +179,7 @@ def export_relion(
 
     child = pexpect.spawn(cmd[0], cmd[1:], cwd=str(root), encoding="utf-8")
     child.logfile = sys.stdout
-    child.expect(pexpect.EOF)
+    child.expect(pexpect.EOF, timeout=None)
     rc = child.wait()
     if rc:
         raise subprocess.CalledProcessError(rc, " ".join(cmd))

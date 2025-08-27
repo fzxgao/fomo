@@ -171,12 +171,12 @@ def export_relion(
     # Run WarpTools in a pseudo-terminal. If the process is suspended with a
     # "Stopped (tty input)" message, automatically resume it by sending "fg".
 
-    child = pexpect.spawn("bash", ["-lc", cmd], cwd=str(root), encoding="utf-8")
-    child.logfile = sys.stdout
+    child = pexpect.spawn(cmd[0], cmd[1:], cwd=str(root))
+    child.logfile = sys.stdout.buffer
     child.expect(pexpect.EOF)
-    rc = child.wait()
-    if rc:
-        raise subprocess.CalledProcessError(rc, cmd)
+    child.close()
+    if child.exitstatus:
+        raise subprocess.CalledProcessError(child.exitstatus, cmd)
 
     if verbose:
        print("[relion] ran WarpTools ts_export_particles")

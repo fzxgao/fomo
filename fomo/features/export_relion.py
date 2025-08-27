@@ -124,8 +124,8 @@ def export_relion(
     root_dir: Path | str = Path.cwd(),
     *,
     output_angpix: float = 4.0,
-    warpbox: int = 100,
-    warp_diameter: int = 140,
+    warpbox: int = 128,
+    warp_diameter: int = 220,
     verbose: bool = False,
 ) -> None:
     """Run WarpTools to export particles for RELION.

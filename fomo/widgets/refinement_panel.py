@@ -158,7 +158,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         _disable_scroll(self.area_search_r1_y)
         self.area_search_r1_z = QtWidgets.QSpinBox()
         self.area_search_r1_z.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.area_search_r1_z.setValue(12)
+        self.area_search_r1_z.setValue(8)
         self.area_search_r1_z.setMinimumWidth(30)
         _disable_scroll(self.area_search_r1_z)
         sh.addWidget(self.area_search_r1_x); sh.addWidget(self.area_search_r1_y); sh.addWidget(self.area_search_r1_z)
@@ -177,7 +177,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         #15 Separation in Tomogram
         self.separation_in_tomogram_r1 = QtWidgets.QSpinBox()
         self.separation_in_tomogram_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.separation_in_tomogram_r1.setValue(2)
+        self.separation_in_tomogram_r1.setValue(14)
         _disable_scroll(self.separation_in_tomogram_r1)
         form.addRow("Separation in Tomogram", self.separation_in_tomogram_r1)
         #16 Basic MRA

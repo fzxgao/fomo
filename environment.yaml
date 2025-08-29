@@ -1,0 +1,15 @@
+name: fomo
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9
+  - numpy>=1.23
+  - mrcfile>=1.4
+  - pyqt>=5.15
+  - matplotlib>=3.6
+  - pexpect>=4
+  - pip
+  - pip:
+      - emfile>=0.3
+      - eulerangles>=1.0

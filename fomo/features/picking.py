@@ -319,22 +319,41 @@ class PickingModeHandler:
         self.tbl_file_change_unchanged_check()
         if self.tbl_unchanged:
             return
-        if hasattr(self.viewer, "_clear_refined_views") and getattr(
-            self.viewer, "_refined_avg", None
-        ) is None:
-            self.viewer._clear_refined_views()
-        if hasattr(self.viewer, "_finish_refinement"):
-            self.viewer._finish_refinement()
-        if hasattr(self.viewer, "_collect_refinement_params") and hasattr(
-            self.viewer, "_setup_refinement_project"
-        ):
-            folder, params = self.viewer._collect_refinement_params()
-            catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
-            align_dir = catalogue / folder
-            self.viewer._refine_folder = folder
-            if hasattr(self.viewer, "_refined_avg"):
-                self.viewer._defer_refine_display = self.viewer._refined_avg is not None
-            self.viewer._setup_refinement_project(folder, align_dir, params)
+        v = self.viewer
+        # Require necessary hooks on the viewer
+        if not (hasattr(v, "_collect_refinement_params") and hasattr(v, "_setup_refinement_project")):
+            return
+        # Do not start if no initial average or a run is already active
+        if getattr(v, "_initial_avg", None) is None:
+            return
+        if getattr(v, "_refine_run_proc", None) is not None:
+            return
+        # Collect params and verify template exists
+        folder, params = v._collect_refinement_params()
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+        template = (
+            catalogue
+            / "average_reference"
+            / str(params.get("box_size"))
+            / "rawTemplate.em"
+        )
+        if not template.exists():
+            if getattr(v, "_verbose", False):
+                print(f"[refine] missing template: {template}")
+            return
+        align_dir = catalogue / folder
+        if align_dir.exists():
+            return
+        # We're launching a new refinement: clean up any prior state first
+        if hasattr(v, "_finish_refinement"):
+            v._finish_refinement()
+        if hasattr(v, "_clear_refined_views") and getattr(v, "_refined_avg", None) is None:
+            v._clear_refined_views()
+        # Set state and launch
+        v._refine_folder = folder
+        if hasattr(v, "_refined_avg"):
+            v._defer_refine_display = v._refined_avg is not None
+        v._setup_refinement_project(folder, align_dir, params)
 
     def _on_extraction_finished(self):
         """Handle UI updates after background extraction completes."""

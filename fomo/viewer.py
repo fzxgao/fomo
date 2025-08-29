@@ -77,7 +77,8 @@ class TomoViewer(QtWidgets.QWidget):
 
     def __init__(self, path, verbose=False,
                  scroll_base=4, scroll_threshold=2.0,
-                 scroll_mult=0.01, scroll_max_streak=4):
+                 scroll_mult=0.01, scroll_max_streak=4,
+                 max_cache_mbytes=None, cache_timeout=600):
         super().__init__()
         self._verbose = verbose
         self._sv_params = dict(
@@ -98,9 +99,17 @@ class TomoViewer(QtWidgets.QWidget):
         self.file_hist = {}
         self.slice_caches = {}
         self.prefetched_slices = {}
+        self._cache_last_access = {}
+        self.cache_timeout_sec = cache_timeout
+        self.max_cache_bytes = None if max_cache_mbytes is None else max_cache_mbytes * 1024 * 1024
         self.metadata_lock = threading.Lock()
         self._meta_futures = {}
         self._executor = concurrent.futures.ThreadPoolExecutor()
+
+        # Periodic cache pruning
+        self._cache_timer = QtCore.QTimer(self)
+        self._cache_timer.timeout.connect(self._prune_caches)
+        self._cache_timer.start(60_000)
 
         # Placeholder cache; will be replaced per-file
         self.cache = SliceCache(128)
@@ -299,6 +308,7 @@ class TomoViewer(QtWidgets.QWidget):
             self.file_stats[idx] = (amin, amax, amean)
             self.file_hist[idx] = (hist, edges)
             self.slice_caches[idx] = SliceCache(128)
+            self._cache_last_access[idx] = time.monotonic()
 
     def _preload_metadata(self):
         # Compute current index synchronously
@@ -315,6 +325,34 @@ class TomoViewer(QtWidgets.QWidget):
             fut = self._meta_futures.get(idx)
             if fut is not None:
                 fut.result()
+
+    def _cache_bytes(self, cache):
+        return sum(len(buf) for (_, buf) in cache._data.values())
+
+    def _prune_caches(self):
+        now = time.monotonic()
+        for k in list(self.slice_caches.keys()):
+            if k == self.idx:
+                continue
+            last = self._cache_last_access.get(k, 0)
+            if now - last > self.cache_timeout_sec:
+                self.slice_caches[k].clear()
+                del self.slice_caches[k]
+                self.prefetched_slices.pop(k, None)
+                self._cache_last_access.pop(k, None)
+        if self.max_cache_bytes is not None:
+            total = sum(self._cache_bytes(c) for c in self.slice_caches.values())
+            if total > self.max_cache_bytes:
+                for k in sorted(self.slice_caches.keys(), key=lambda i: self._cache_last_access.get(i, 0)):
+                    if k == self.idx:
+                        continue
+                    self.slice_caches[k].clear()
+                    del self.slice_caches[k]
+                    self.prefetched_slices.pop(k, None)
+                    self._cache_last_access.pop(k, None)
+                    total = sum(self._cache_bytes(c) for c in self.slice_caches.values())
+                    if total <= self.max_cache_bytes:
+                        break
 
     # ---------- Slice prefetch ----------
     def _prefetch_neighbors(self):
@@ -344,10 +382,12 @@ class TomoViewer(QtWidgets.QWidget):
                 cache.put(('xy', zc), (qimg_xy, buf_xy))
                 qimg_xz, buf_xz = self._qimg_from_slice(data[:, yc, :], minv, maxv)
                 cache.put(('xz', yc), (qimg_xz, buf_xz))
+                self._cache_last_access[n] = time.monotonic()
                 self.prefetched_slices[n] = True
         for k in list(self.prefetched_slices.keys()):
             if abs(k - self.idx) > 1:
                 self.prefetched_slices.pop(k, None)
+        self._prune_caches()
 
     # ---------- File loading ----------
     def load_file(self, idx):
@@ -366,6 +406,7 @@ class TomoViewer(QtWidgets.QWidget):
         if self.cache is None:
             self.cache = SliceCache(128)
             self.slice_caches[idx] = self.cache
+        self._cache_last_access[idx] = time.monotonic()
         self.view_xy.dynamic_fit = True
         self.view_xz.dynamic_fit = True
 
@@ -410,8 +451,12 @@ class TomoViewer(QtWidgets.QWidget):
         self.top_split.setVisible(self.xz_visible)
         for k in list(self.slice_caches.keys()):
             if abs(k - idx) > 1:
+                self.slice_caches[k].clear()
                 del self.slice_caches[k]
                 self.prefetched_slices.pop(k, None)
+                self._cache_last_access.pop(k, None)
+
+        self._prune_caches()
 
         QtCore.QTimer.singleShot(0, lambda: self._initial_paint())
         threading.Thread(target=self._prefetch_neighbors, daemon=True).start()
@@ -445,20 +490,24 @@ class TomoViewer(QtWidgets.QWidget):
 
     def _get_xy(self, z):
         key = ('xy', z)
+        self._cache_last_access[self.idx] = time.monotonic()
         cached = self.cache.get(key)
         if cached:
             return cached
         qimg, buf = self._qimg_from_slice(self.data[z, :, :])
         self.cache.put(key, (qimg, buf))
+        self._prune_caches()
         return (qimg, buf)
 
     def _get_xz(self, y):
         key = ('xz', y)
+        self._cache_last_access[self.idx] = time.monotonic()
         cached = self.cache.get(key)
         if cached:
             return cached
         qimg, buf = self._qimg_from_slice(self.data[:, y, :])
         self.cache.put(key, (qimg, buf))
+        self._prune_caches()
         return (qimg, buf)
 
     # ---------- Rendering ----------

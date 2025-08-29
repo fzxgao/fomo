@@ -21,6 +21,8 @@ def main():
                         help="Per-streak multiplier (default: 0.01)")
     parser.add_argument("--scroll-max-streak", type=int, default=4,
                         help="Max streak growth steps (default: 4)")
+    parser.add_argument("--max-cache-mbytes", type=float, default=None,
+                        help="Approximate maximum MB for slice caches")
     args = parser.parse_args()
 
     verbose = args.verbose or os.environ.get("FOMO_VERBOSE", "") not in ("", "0", "false", "False")
@@ -39,6 +41,7 @@ def main():
         scroll_threshold=args.scroll_threshold,
         scroll_mult=args.scroll_mult,
         scroll_max_streak=args.scroll_max_streak,
+        max_cache_mbytes=args.max_cache_mbytes,
     )
     w.resize(1250, 945)
     w.show()

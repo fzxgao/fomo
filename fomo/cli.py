@@ -12,6 +12,8 @@ def build_parser():
     p.add_argument("--scroll-threshold", type=float, default=2.0)
     p.add_argument("--scroll-mult", type=float, default=0.01)
     p.add_argument("--scroll-max-streak", type=int, default=4)
+    p.add_argument("--max-cache-mbytes", type=float, default=None,
+                   help="Approximate maximum MB for slice caches")
     return p
 
 def main(argv=None):
@@ -29,6 +31,7 @@ def main(argv=None):
         scroll_threshold=args.scroll_threshold,
         scroll_mult=args.scroll_mult,
         scroll_max_streak=args.scroll_max_streak,
+        max_cache_mbytes=args.max_cache_mbytes,
     )
     w.resize(1250, 945)
     w.show()

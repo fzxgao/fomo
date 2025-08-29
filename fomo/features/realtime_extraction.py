@@ -47,23 +47,30 @@ def extract_particles_on_exit(viewer) -> None:
         return
 
     particles_dir = volume_dir / f"particles_volume_{tomogram_number}_{tomogram_name}"
-    # Clean any existing particles/crop file so indices remain consistent
-    if particles_dir.exists():
-        for em in particles_dir.glob("particle_*.em"):
-            try:
-                em.unlink()
-            except Exception:
-                pass
-        try:
-            (particles_dir / "crop.tbl").unlink()
-        except Exception:
-            pass
     particles_dir.mkdir(parents=True, exist_ok=True)
+
+    crop_path = particles_dir / "crop.tbl"
+
+    # Load existing crop table (if any) keyed by all columns except the index
+    existing = {}
+    max_idx = 0
+    if crop_path.exists():
+        with crop_path.open() as fh:
+            for line in fh:
+                line = line.rstrip("\n")
+                if not line.strip():
+                    continue
+                cols = line.split()
+                idx = int(cols[0])
+                key = " ".join(cols[1:])
+                existing[key] = (idx, line)
+                max_idx = max(max_idx, idx)
 
     volume = viewer.mrc_handles[viewer.idx].data  # (Z, Y, X)
     half = box_size // 2
-    particle_idx = 1
-    merged_lines = []
+
+    seen = set()
+    new_entries = {}
 
     # Search recursively for raw.tbl files produced for each model
     # and merge all coordinates that fall within the tomogram bounds.
@@ -96,14 +103,53 @@ def extract_particles_on_exit(viewer) -> None:
                 ):
                     print(f"{line} THIS LINE WAS SKIPPED DUE TO OUT OF BOUNDS")
                     continue
-                subvol = volume[zmin:zmax, ymin:ymax, xmin:xmax]
-                _write_em(subvol, particles_dir / f"particle_{particle_idx:06d}.em")
-                # Renumber first column sequentially across merged files
-                cols[0] = str(particle_idx)
-                merged_lines.append(" ".join(cols))
-                particle_idx += 1
 
-    if merged_lines:
-        with (particles_dir / "crop.tbl").open("w") as out:
-            for l in merged_lines:
+                key = " ".join(cols[1:])
+                if key in existing:
+                    # Coordinate already extracted
+                    seen.add(key)
+                    continue
+
+                subvol = volume[zmin:zmax, ymin:ymax, xmin:xmax]
+                max_idx += 1
+                _write_em(subvol, particles_dir / f"particle_{max_idx:06d}.em")
+                cols[0] = str(max_idx)
+                new_entries[key] = (max_idx, " ".join(cols))
+                seen.add(key)
+
+    # Remove particles that are no longer present
+    for key, (idx, _) in list(existing.items()):
+        if key not in seen:
+            try:
+                (particles_dir / f"particle_{idx:06d}.em").unlink()
+            except Exception:
+                pass
+            del existing[key]
+
+    existing.update(new_entries)
+
+    # Renumber sequentially to keep indices contiguous
+    sorted_items = sorted(existing.values(), key=lambda x: x[0])
+    lines = []
+    for new_idx, (old_idx, line) in enumerate(sorted_items, start=1):
+        if old_idx != new_idx:
+            old_path = particles_dir / f"particle_{old_idx:06d}.em"
+            new_path = particles_dir / f"particle_{new_idx:06d}.em"
+            try:
+                old_path.rename(new_path)
+            except Exception:
+                pass
+            cols = line.split()
+            cols[0] = str(new_idx)
+            line = " ".join(cols)
+        lines.append(line)
+
+    if lines:
+        with crop_path.open("w") as out:
+            for l in lines:
                 out.write(l + "\n")
+    else:
+        try:
+            crop_path.unlink()
+        except Exception:
+            pass

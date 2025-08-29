@@ -93,7 +93,14 @@ class TomoViewer(QtWidgets.QWidget):
         if not self.files:
             raise SystemExit("No MRC files found.")
         self.idx = 0 if os.path.isdir(path) else self.files.index(path)
-        self.mrc_handles = [mrcfile.mmap(f, permissive=True) for f in self.files]
+        # Show progress while memory-mapping tomograms (can take a while)
+        self._set_status_message(f"Opening {len(self.files)} tomogram(s) ...")
+        self.mrc_handles = []
+        for i, f in enumerate(self.files, 1):
+            base = os.path.basename(f)
+            self._set_status_message(f"Opening {i}/{len(self.files)}: {base}")
+            print(f"[fomo] mmap {i}/{len(self.files)}: {f}", flush=True)
+            self.mrc_handles.append(mrcfile.mmap(f, permissive=True))
         # Metadata and slice caches
         self.file_stats = {}
         self.file_hist = {}
@@ -154,6 +161,7 @@ class TomoViewer(QtWidgets.QWidget):
         self._refined_tbl_path = None
 
         # Preload metadata before building UI
+        self._set_status_message("Computing histogram and basic stats ...")
         self._preload_metadata()
 
         # Build UI
@@ -391,6 +399,10 @@ class TomoViewer(QtWidgets.QWidget):
 
     # ---------- File loading ----------
     def load_file(self, idx):
+        # Indicate potentially long operation while switching tomograms
+        base = os.path.basename(self.files[idx])
+        self._set_status_message(f"Loading {idx+1}/{len(self.files)}: {base} (preparing views ...)")
+        print(f"[fomo] load file {idx+1}/{len(self.files)}: {self.files[idx]}", flush=True)
         self._cancel_xz_timer()
         self.clear_marker_xy()
         self._ensure_metadata(idx)
@@ -458,6 +470,7 @@ class TomoViewer(QtWidgets.QWidget):
 
         self._prune_caches()
 
+        self._set_status_message(f"Loaded: {base} ({self.Z}x{self.Y}x{self.X}). Rendering ...")
         QtCore.QTimer.singleShot(0, lambda: self._initial_paint())
         threading.Thread(target=self._prefetch_neighbors, daemon=True).start()
 
@@ -557,7 +570,20 @@ class TomoViewer(QtWidgets.QWidget):
                 self._xz_timer.stop()
             except Exception:
                 pass
-            self._xz_timer = None
+        self._xz_timer = None
+    
+    # ---------- Status utilities ----------
+    def _set_status_message(self, message: str):
+        """Set the status label text and keep UI responsive.
+
+        Also useful to call before long, blocking work so users see progress.
+        """
+        try:
+            self.lbl.setText(message)
+        except Exception:
+            pass
+        # Allow pending paint/event processing so the label updates immediately
+        QtWidgets.QApplication.processEvents(QtCore.QEventLoop.AllEvents, 50)
     # ---------- Status / fitting ----------
     def _fit_views_only(self):
         if self.view_xy.dynamic_fit:

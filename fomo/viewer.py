@@ -725,7 +725,30 @@ class TomoViewer(QtWidgets.QWidget):
     def add_model(self, tbl_path, points, vectors=None):
         path = Path(tbl_path) if tbl_path is not None else None
         name = path.name if path is not None else "model"
+        # Normalize input points to shape (N, 3) to avoid unpacking errors
         pts = np.array(points, dtype=np.float32)
+        # Ensure at least 2D; handle single point or flat arrays
+        if pts.size == 0:
+            pts = np.empty((0, 3), dtype=np.float32)
+        elif pts.ndim == 1:
+            # If exactly 3 values, treat as a single XYZ point
+            if pts.shape[0] == 3:
+                pts = pts.reshape(1, 3)
+            # If multiple of 3, reshape flat array into (N,3)
+            elif pts.shape[0] % 3 == 0:
+                pts = pts.reshape(-1, 3)
+            else:
+                if self._verbose:
+                    print(f"[models] points for {name} have invalid shape {pts.shape}; skipping")
+                return
+        elif pts.ndim >= 2 and pts.shape[-1] != 3:
+            # Try to coerce if last dimension isn't 3 but total size allows
+            try:
+                pts = pts.reshape(-1, 3)
+            except Exception:
+                if self._verbose:
+                    print(f"[models] points for {name} have incompatible shape {pts.shape}; skipping")
+                return
         vecs = None
         if vectors is not None:
             vecs = np.array(vectors, dtype=np.float32)
@@ -799,7 +822,21 @@ class TomoViewer(QtWidgets.QWidget):
         bn = getattr(picking, "_plane_b", None)
 
         for model in self.models:
-            pts = model['points']
+            # Robustly handle points shape (N,3); skip invalid shapes
+            pts = np.asarray(model['points'], dtype=np.float32)
+            if pts.size == 0:
+                self._model_items.append([])
+                continue
+            if pts.ndim == 1 and pts.shape[0] == 3:
+                pts = pts.reshape(1, 3)
+            elif pts.ndim != 2 or pts.shape[1] != 3:
+                try:
+                    pts = pts.reshape(-1, 3)
+                except Exception:
+                    if self._verbose:
+                        print(f"[models] skipping overlay for invalid points shape: {pts.shape}")
+                    self._model_items.append([])
+                    continue
             vecs = model.get('vectors')
             items = []
             if use_plane:

@@ -1250,6 +1250,16 @@ class TomoViewer(QtWidgets.QWidget):
             return
         folder, params = self._collect_refinement_params()
         catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments"
+        template = (
+            catalogue
+            / "average_reference"
+            / str(params["box_size"])
+            / "rawTemplate.em"
+        )
+        if not template.exists():
+            if self._verbose:
+                print(f"[refine] missing template: {template}")
+            return
         align_dir = catalogue / folder
         if align_dir.exists():
             return

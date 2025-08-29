@@ -21,7 +21,7 @@ def main():
                         help="Per-streak multiplier (default: 0.01)")
     parser.add_argument("--scroll-max-streak", type=int, default=4,
                         help="Max streak growth steps (default: 4)")
-    parser.add_argument("--max-cache-mbytes", type=float, default=None,
+    parser.add_argument("--max-cache-mbytes", type=float, default=2048,
                         help="Approximate maximum MB for slice caches")
     args = parser.parse_args()
 

@@ -77,7 +77,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         # 1 Iterations
         self.ite_r1 = QtWidgets.QSpinBox()
         self.ite_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.ite_r1.setValue(4)
+        self.ite_r1.setValue(8)
         _disable_scroll(self.ite_r1)
         form.addRow("Iterations", self.ite_r1)
         # 2 References

@@ -87,7 +87,7 @@ def export_relion_clean_stars(root_dir: Path | str = Path.cwd(), *, verbose: boo
                 continue
             coords = data[:, 3:6]  # refined coordinates
             eulers = data[:, 6:9]
-            eulers = convert_eulers(eulers, source_meta="dynamo", target_meta="relion")
+            # eulers = convert_eulers(eulers, source_meta="dynamo", target_meta="relion")
             norm_x = coords[:, 0] / tomo_dim_xy
             norm_y = coords[:, 1] / tomo_dim_xy
             norm_z = coords[:, 2] / tomo_dim_z

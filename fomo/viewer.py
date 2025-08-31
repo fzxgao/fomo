@@ -64,6 +64,28 @@ class StatusLabel(QtWidgets.QLabel):
         QtWidgets.QApplication.clipboard().setText(os.path.abspath(self._path_fn()))
         super().mouseDoubleClickEvent(event)
 
+class FadingStatusLabel(StatusLabel):
+    """Status label with fixed width and fade-out for overflowing text."""
+    def __init__(self, path_fn, width=100, *args, **kwargs):
+        super().__init__(path_fn, *args, **kwargs)
+        self.setFixedWidth(width)
+    def paintEvent(self, event):  # pragma: no cover - GUI interaction
+        painter = QtGui.QPainter(self)
+        text = self.text()
+        metrics = self.fontMetrics()
+        if metrics.width(text) > self.width():
+            color = self.palette().color(QtGui.QPalette.WindowText)
+            grad = QtGui.QLinearGradient(self.width() - 30, 0, self.width(), 0)
+            grad.setColorAt(0, color)
+            fade = QtGui.QColor(color)
+            fade.setAlpha(0)
+            grad.setColorAt(1, fade)
+            pen = QtGui.QPen(QtGui.QBrush(grad), 1)
+        else:
+            pen = QtGui.QPen(self.palette().color(QtGui.QPalette.WindowText))
+        painter.setPen(pen)
+        painter.drawText(self.rect(), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, text)
+
 
 # ---------------- Main Viewer ----------------
 class TomoViewer(QtWidgets.QWidget):
@@ -92,7 +114,21 @@ class TomoViewer(QtWidgets.QWidget):
         self.files = list_mrcs(path)
         if not self.files:
             raise SystemExit("No MRC files found.")
-        self.idx = 0 if os.path.isdir(path) else self.files.index(path)
+        self.root_dir = os.path.dirname(self.files[0])
+        self.prev_tomo_path = os.path.join(self.root_dir, "previous_tomo")
+        self._particle_count = 0
+        self._particle_mtime = None
+        if os.path.isdir(path):
+            self.idx = 0
+            if os.path.exists(self.prev_tomo_path):
+                try:
+                    last = Path(self.prev_tomo_path).read_text().strip()
+                    if last in self.files:
+                        self.idx = self.files.index(last)
+                except Exception:
+                    pass
+        else:
+            self.idx = self.files.index(path)
         # Show progress while memory-mapping tomograms (can take a while)
         self._set_status_message(f"Opening {len(self.files)} tomogram(s) ...")
         self.mrc_handles = []
@@ -237,9 +273,19 @@ class TomoViewer(QtWidgets.QWidget):
         for view in (self.view_xy, self.view_xz):
             view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
             view.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        
+
+
+        status_layout = QtWidgets.QHBoxLayout()
+        self.particle_lbl = QtWidgets.QLabel()
+        self.tomo_name_lbl = FadingStatusLabel(lambda: self.files[self.idx])
+        self.tomo_idx_lbl = QtWidgets.QLabel()
         self.lbl = StatusLabel(lambda: self.files[self.idx])
-        v.addWidget(self.lbl)
+        status_layout.addWidget(self.particle_lbl)
+        status_layout.addWidget(self.tomo_name_lbl)
+        status_layout.addWidget(self.tomo_idx_lbl)
+        status_layout.addWidget(self.lbl, 1)
+        v.addLayout(status_layout)
+        self._update_particle_label()
         self.picking_panel.model_list.modelActivated.connect(self.activate_model)
         self.picking_panel.model_list.modelDeleted.connect(self.delete_model)
 
@@ -401,6 +447,7 @@ class TomoViewer(QtWidgets.QWidget):
     def load_file(self, idx):
         # Indicate potentially long operation while switching tomograms
         base = os.path.basename(self.files[idx])
+        self._save_last_tomo(idx)
         self._set_status_message(f"Loading {idx+1}/{len(self.files)}: {base} (preparing views ...)")
         print(f"[fomo] load file {idx+1}/{len(self.files)}: {self.files[idx]}", flush=True)
         self._cancel_xz_timer()
@@ -573,6 +620,13 @@ class TomoViewer(QtWidgets.QWidget):
         self._xz_timer = None
     
     # ---------- Status utilities ----------
+    def _save_last_tomo(self, idx=None):
+        idx = self.idx if idx is None else idx
+        try:
+            Path(self.prev_tomo_path).write_text(self.files[idx])
+        except Exception:
+            pass
+
     def _set_status_message(self, message: str):
         """Set the status label text and keep UI responsive.
 
@@ -584,6 +638,21 @@ class TomoViewer(QtWidgets.QWidget):
             pass
         # Allow pending paint/event processing so the label updates immediately
         QtWidgets.QApplication.processEvents(QtCore.QEventLoop.AllEvents, 50)
+
+    def _update_particle_label(self):
+        # Count particles from the merged Dynamo table under the project catalogue
+        tbl = (Path.cwd() / "fomo_dynamo_catalogue" / "tomograms" / "merged" / "merged_crop.tbl").as_posix()
+        try:
+            mtime = os.path.getmtime(tbl)
+            if getattr(self, "_particle_mtime", None) != mtime:
+                with open(tbl) as f:
+                    self._particle_count = sum(1 for line in f if line.strip())
+                self._particle_mtime = mtime
+        except Exception:
+            self._particle_count = 0
+            self._particle_mtime = None
+        self.particle_lbl.setText(f"Particles: {getattr(self, '_particle_count', 0)}")
+
     # ---------- Status / fitting ----------
     def _fit_views_only(self):
         if self.view_xy.dynamic_fit:
@@ -592,10 +661,15 @@ class TomoViewer(QtWidgets.QWidget):
             self.view_xz.fit_height()
 
     def _update_status(self):
-        status = f"{os.path.basename(self.files[self.idx])}  X:{self.x} Y:{self.y} Z:{self.z}"
+        tomo_name = os.path.basename(self.files[self.idx])
+        self.tomo_name_lbl.setText(tomo_name)
+        self.tomo_name_lbl.setToolTip(tomo_name)
+        self.tomo_idx_lbl.setText(f"{self.idx + 1}/{len(self.files)}")
+        status = f"X:{self.x} Y:{self.y} Z:{self.z}"
         if self.picking_handler.is_active():
             status += " | PICKING MODE ACTIVATED"
         self.lbl.setText(status)
+        self._update_particle_label()
 
     # ---------- Click interactions ----------
     def _clicked_xy(self, x, y):

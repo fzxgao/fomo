@@ -18,16 +18,13 @@ def merge_crop_tables_and_particles(root: Path) -> None:
     merged_dir = catalogue / "merged"
     merged_dir.mkdir(parents=True, exist_ok=True)
 
-    # Clean previous merged particles and table
+    # Clean previous merged particles; keep existing merged_crop.tbl until we
+    # finish writing a new one to avoid temporary zero counts in the UI.
     for em in merged_dir.glob("particle_*.em"):
         try:
             em.unlink()
         except Exception:
             pass
-    try:
-        (merged_dir / "merged_crop.tbl").unlink()
-    except Exception:
-        pass
 
     next_idx = 1
     merged_lines: List[str] = []
@@ -63,7 +60,18 @@ def merge_crop_tables_and_particles(root: Path) -> None:
                 next_idx += 1
 
     if merged_lines:
+        # Write to a temp file in the same directory, then atomically replace
+        # the final file so the GUI never sees an empty table mid-merge.
+        tmp_path = merged_dir / "merged_crop.tbl.tmp"
+        final_path = merged_dir / "merged_crop.tbl"
         try:
-            (merged_dir / "merged_crop.tbl").write_text("\n".join(merged_lines) + "\n")
+            tmp_path.write_text("\n".join(merged_lines) + "\n")
+            # Atomic on POSIX and effectively atomic on modern Windows
+            tmp_path.replace(final_path)
         except Exception:
-            pass
+            # Best effort: if replace fails, try to clean the temp
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass

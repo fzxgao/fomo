@@ -63,99 +63,97 @@ class RefinementSidePanel(QtWidgets.QSplitter):
 
     # -------- Numerical parameters --------
     def _build_numeric_params_section(self):
-        # Container widget that holds a label and a tab widget with the
-        # numeric parameter widgets for two rounds.
+        # Container widget that holds a label and a tabbed area with all
+        # numeric parameter widgets split into Round 1 and Round 2.
         widget = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(widget)
         v.addWidget(QtWidgets.QLabel("Numerical parameters"))
-
         tabs = QtWidgets.QTabWidget()
-        v.addWidget(tabs)
 
-        # ----- Round 1 tab -----
-        r1_tab = QtWidgets.QWidget()
-        r1_v = QtWidgets.QVBoxLayout(r1_tab)
+        def _wrap_label(text: str) -> QtWidgets.QLabel:
+            lbl = QtWidgets.QLabel(text)
+            lbl.setWordWrap(True)
+            lbl.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            lbl.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+            return lbl
 
-        r1_form_widget = QtWidgets.QWidget()
-        r1_form = QtWidgets.QFormLayout(r1_form_widget)
-        r1_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldsStayAtSizeHint)
-        r1_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
-        r1_form.setHorizontalSpacing(4)
-        r1_form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        r1_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        # ----- Round 1 -----
+        form_widget_r1 = QtWidgets.QWidget()
+        form_r1 = QtWidgets.QFormLayout(form_widget_r1)
+        form_r1.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
 
         # 1 Iterations
         self.ite_r1 = QtWidgets.QSpinBox()
         self.ite_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.ite_r1.setValue(8)
         _disable_scroll(self.ite_r1)
-        r1_form.addRow("Iterations", self.ite_r1)
+        form_r1.addRow(_wrap_label("Iterations"), self.ite_r1)
         # 2 References
         self.nref_r1 = QtWidgets.QSpinBox()
         self.nref_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.nref_r1.setValue(1)
         _disable_scroll(self.nref_r1)
-        r1_form.addRow("References", self.nref_r1)
+        form_r1.addRow(_wrap_label("References"), self.nref_r1)
         # 3 Cone Aperture
         self.cone_range_r1 = QtWidgets.QSpinBox()
         self.cone_range_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.cone_range_r1.setValue(45)
         _disable_scroll(self.cone_range_r1)
-        r1_form.addRow("Cone Aperture", self.cone_range_r1)
+        form_r1.addRow(_wrap_label("Cone Aperture"), self.cone_range_r1)
         # 4 Cone Sampling
         self.cone_sampling_r1 = QtWidgets.QSpinBox()
         self.cone_sampling_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.cone_sampling_r1.setValue(15)
         _disable_scroll(self.cone_sampling_r1)
-        r1_form.addRow("Cone Sampling", self.cone_sampling_r1)
+        form_r1.addRow(_wrap_label("Cone Sampling"), self.cone_sampling_r1)
         # 5 Azimuth Rotation Range
         self.inplane_range_r1 = QtWidgets.QSpinBox()
         self.inplane_range_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.inplane_range_r1.setValue(60)
         _disable_scroll(self.inplane_range_r1)
-        r1_form.addRow("Azimuth Rotation Range", self.inplane_range_r1)
+        form_r1.addRow(_wrap_label("Azimuth Rotation Range"), self.inplane_range_r1)
         # 6 Azimuth Rotation Sampling
         self.inplane_sampling_r1 = QtWidgets.QSpinBox()
         self.inplane_sampling_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.inplane_sampling_r1.setValue(15)
         _disable_scroll(self.inplane_sampling_r1)
-        r1_form.addRow("Azimuth Rotation Sampling", self.inplane_sampling_r1)
+        form_r1.addRow(_wrap_label("Azimuth Rotation Sampling"), self.inplane_sampling_r1)
         # 7 Refine
         self.refine_r1 = QtWidgets.QSpinBox()
         self.refine_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.refine_r1.setValue(2)
         _disable_scroll(self.refine_r1)
-        r1_form.addRow("Refine", self.refine_r1)
+        form_r1.addRow(_wrap_label("Refine"), self.refine_r1)
         # 8 Refine Factor
         self.refine_factor_r1 = QtWidgets.QSpinBox()
         self.refine_factor_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.refine_factor_r1.setValue(2)
         _disable_scroll(self.refine_factor_r1)
-        r1_form.addRow("Refine Factor", self.refine_factor_r1)
+        form_r1.addRow(_wrap_label("Refine Factor"), self.refine_factor_r1)
         # 9 High Pass
         self.high_r1 = QtWidgets.QSpinBox()
         self.high_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.high_r1.setValue(1)
         _disable_scroll(self.high_r1)
-        r1_form.addRow("High Pass", self.high_r1)
+        form_r1.addRow(_wrap_label("High Pass"), self.high_r1)
         #10 Low Pass
         self.low_r1 = QtWidgets.QSpinBox()
         self.low_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.low_r1.setValue(12)
         _disable_scroll(self.low_r1)
-        r1_form.addRow("Low Pass", self.low_r1)
+        form_r1.addRow(_wrap_label("Low Pass"), self.low_r1)
         #11 Symmetry
         self.sym_r1 = QtWidgets.QLineEdit("C1")
-        r1_form.addRow("Symmetry", self.sym_r1)
+        form_r1.addRow(_wrap_label("Symmetry"), self.sym_r1)
         #12 Particle Dimensions
         self.dim_r1 = QtWidgets.QSpinBox()
         self.dim_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.dim_r1.setValue(52)
         _disable_scroll(self.dim_r1)
-        r1_form.addRow("Particle Dimensions", self.dim_r1)
+        form_r1.addRow(_wrap_label("Particle Dimensions"), self.dim_r1)
         #13 Shift limits
-        r1_shift_widget = QtWidgets.QWidget()
-        r1_sh = QtWidgets.QHBoxLayout(r1_shift_widget)
+        shift_widget_r1 = QtWidgets.QWidget()
+        sh1 = QtWidgets.QHBoxLayout(shift_widget_r1)
         self.area_search_r1_x = QtWidgets.QSpinBox()
         self.area_search_r1_x.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.area_search_r1_x.setValue(4)
@@ -171,8 +169,8 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.area_search_r1_z.setValue(8)
         self.area_search_r1_z.setMinimumWidth(30)
         _disable_scroll(self.area_search_r1_z)
-        r1_sh.addWidget(self.area_search_r1_x); r1_sh.addWidget(self.area_search_r1_y); r1_sh.addWidget(self.area_search_r1_z)
-        r1_form.addRow("Shift limits", r1_shift_widget)
+        sh1.addWidget(self.area_search_r1_x); sh1.addWidget(self.area_search_r1_y); sh1.addWidget(self.area_search_r1_z)
+        form_r1.addRow(_wrap_label("Shift limits"), shift_widget_r1)
         #14 Shift limiting way
         self.area_search_modus_r1 = QtWidgets.QComboBox()
         self.area_search_modus_r1.addItems([
@@ -183,25 +181,25 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         ])
         self.area_search_modus_r1.setCurrentText("From the center of the particle cube")
         _disable_scroll(self.area_search_modus_r1)
-        r1_form.addRow("Shift limiting way", self.area_search_modus_r1)
+        form_r1.addRow(_wrap_label("Shift limiting way"), self.area_search_modus_r1)
         #15 Separation in Tomogram
         self.separation_in_tomogram_r1 = QtWidgets.QSpinBox()
         self.separation_in_tomogram_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.separation_in_tomogram_r1.setValue(0)
         _disable_scroll(self.separation_in_tomogram_r1)
-        r1_form.addRow("Separation in Tomogram", self.separation_in_tomogram_r1)
+        form_r1.addRow(_wrap_label("Separation in Tomogram"), self.separation_in_tomogram_r1)
         #16 Basic MRA
         self.mra_r1 = QtWidgets.QSpinBox()
         self.mra_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.mra_r1.setValue(0)
         _disable_scroll(self.mra_r1)
-        r1_form.addRow("Basic MRA", self.mra_r1)
+        form_r1.addRow(_wrap_label("Basic MRA"), self.mra_r1)
         #17 Threshold parameter
         self.threshold_r1 = QtWidgets.QDoubleSpinBox()
         self.threshold_r1.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.threshold_r1.setValue(0.2)
         _disable_scroll(self.threshold_r1)
-        r1_form.addRow("Threshold parameter", self.threshold_r1)
+        form_r1.addRow(_wrap_label("Threshold parameter"), self.threshold_r1)
         #18 Threshold Mode
         self.threshold_mode = QtWidgets.QComboBox()
         self.threshold_mode.addItems([
@@ -214,7 +212,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         ])
         self.threshold_mode.setCurrentText("no thresholding policy")
         _disable_scroll(self.threshold_mode)
-        r1_form.addRow("Threshold Mode", self.threshold_mode)
+        form_r1.addRow(_wrap_label("Threshold Mode"), self.threshold_mode)
         #19 Exclusion Mode
         self.exclusion_mode = QtWidgets.QComboBox()
         self.exclusion_mode.addItems([
@@ -223,13 +221,13 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         ])
         self.exclusion_mode.setCurrentText("No exclusion from averaging and alignment")
         _disable_scroll(self.exclusion_mode)
-        r1_form.addRow("Exclusion Mode", self.exclusion_mode)
+        form_r1.addRow(_wrap_label("Exclusion Mode"), self.exclusion_mode)
 
-        # Ensure text inputs and dropdowns expand to the panel width
-        r1_growing = r1_form_widget.findChildren(
+        # Ensure text inputs and dropdowns expand to the panel width (R1)
+        growing_r1 = form_widget_r1.findChildren(
             (QtWidgets.QLineEdit, QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox)
         )
-        for w in r1_growing:
+        for w in growing_r1:
             if w in (
                 self.area_search_r1_x,
                 self.area_search_r1_y,
@@ -238,110 +236,95 @@ class RefinementSidePanel(QtWidgets.QSplitter):
                 continue
             if isinstance(w, QtWidgets.QComboBox):
                 w.setMinimumContentsLength(0)
-                w.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
-            # Make inputs narrower and keep them close to labels
-            w.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-            if isinstance(w, QtWidgets.QLineEdit):
-                w.setMaximumWidth(200)
-            else:
-                w.setMaximumWidth(250)
-            # Enable label word wrap to avoid overlap
-            lbl = r1_form.labelForField(w)
-            if isinstance(lbl, QtWidgets.QLabel):
-                lbl.setWordWrap(True)
+                w.setSizeAdjustPolicy(
+                    QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+                )
+            w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-        r1_scroll = QtWidgets.QScrollArea()
-        r1_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        r1_scroll.setWidgetResizable(True)
-        r1_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        r1_scroll.setWidget(r1_form_widget)
-        r1_v.addWidget(r1_scroll)
-        tabs.addTab(r1_tab, "Round 1")
+        scroll_r1 = QtWidgets.QScrollArea()
+        scroll_r1.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll_r1.setWidgetResizable(True)
+        scroll_r1.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll_r1.setWidget(form_widget_r1)
+        tabs.addTab(scroll_r1, "Round 1")
 
-        # ----- Round 2 tab -----
-        r2_tab = QtWidgets.QWidget()
-        r2_v = QtWidgets.QVBoxLayout(r2_tab)
-
-        r2_form_widget = QtWidgets.QWidget()
-        r2_form = QtWidgets.QFormLayout(r2_form_widget)
-        r2_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldsStayAtSizeHint)
-        r2_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
-        r2_form.setHorizontalSpacing(4)
-        r2_form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        r2_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        # ----- Round 2 -----
+        form_widget_r2 = QtWidgets.QWidget()
+        form_r2 = QtWidgets.QFormLayout(form_widget_r2)
+        form_r2.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
 
         # 1 Iterations
         self.ite_r2 = QtWidgets.QSpinBox()
         self.ite_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.ite_r2.setValue(8)
         _disable_scroll(self.ite_r2)
-        r2_form.addRow("Iterations", self.ite_r2)
+        form_r2.addRow(_wrap_label("Iterations"), self.ite_r2)
         # 2 References
         self.nref_r2 = QtWidgets.QSpinBox()
         self.nref_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.nref_r2.setValue(1)
         _disable_scroll(self.nref_r2)
-        r2_form.addRow("References", self.nref_r2)
+        form_r2.addRow(_wrap_label("References"), self.nref_r2)
         # 3 Cone Aperture
         self.cone_range_r2 = QtWidgets.QSpinBox()
         self.cone_range_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.cone_range_r2.setValue(45)
         _disable_scroll(self.cone_range_r2)
-        r2_form.addRow("Cone Aperture", self.cone_range_r2)
+        form_r2.addRow(_wrap_label("Cone Aperture"), self.cone_range_r2)
         # 4 Cone Sampling
         self.cone_sampling_r2 = QtWidgets.QSpinBox()
         self.cone_sampling_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.cone_sampling_r2.setValue(15)
         _disable_scroll(self.cone_sampling_r2)
-        r2_form.addRow("Cone Sampling", self.cone_sampling_r2)
+        form_r2.addRow(_wrap_label("Cone Sampling"), self.cone_sampling_r2)
         # 5 Azimuth Rotation Range
         self.inplane_range_r2 = QtWidgets.QSpinBox()
         self.inplane_range_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.inplane_range_r2.setValue(60)
         _disable_scroll(self.inplane_range_r2)
-        r2_form.addRow("Azimuth Rotation Range", self.inplane_range_r2)
+        form_r2.addRow(_wrap_label("Azimuth Rotation Range"), self.inplane_range_r2)
         # 6 Azimuth Rotation Sampling
         self.inplane_sampling_r2 = QtWidgets.QSpinBox()
         self.inplane_sampling_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.inplane_sampling_r2.setValue(15)
         _disable_scroll(self.inplane_sampling_r2)
-        r2_form.addRow("Azimuth Rotation Sampling", self.inplane_sampling_r2)
+        form_r2.addRow(_wrap_label("Azimuth Rotation Sampling"), self.inplane_sampling_r2)
         # 7 Refine
         self.refine_r2 = QtWidgets.QSpinBox()
         self.refine_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.refine_r2.setValue(2)
         _disable_scroll(self.refine_r2)
-        r2_form.addRow("Refine", self.refine_r2)
+        form_r2.addRow(_wrap_label("Refine"), self.refine_r2)
         # 8 Refine Factor
         self.refine_factor_r2 = QtWidgets.QSpinBox()
         self.refine_factor_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.refine_factor_r2.setValue(2)
         _disable_scroll(self.refine_factor_r2)
-        r2_form.addRow("Refine Factor", self.refine_factor_r2)
+        form_r2.addRow(_wrap_label("Refine Factor"), self.refine_factor_r2)
         # 9 High Pass
         self.high_r2 = QtWidgets.QSpinBox()
         self.high_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.high_r2.setValue(1)
         _disable_scroll(self.high_r2)
-        r2_form.addRow("High Pass", self.high_r2)
+        form_r2.addRow(_wrap_label("High Pass"), self.high_r2)
         #10 Low Pass
         self.low_r2 = QtWidgets.QSpinBox()
         self.low_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.low_r2.setValue(12)
         _disable_scroll(self.low_r2)
-        r2_form.addRow("Low Pass", self.low_r2)
+        form_r2.addRow(_wrap_label("Low Pass"), self.low_r2)
         #11 Symmetry
         self.sym_r2 = QtWidgets.QLineEdit("C1")
-        r2_form.addRow("Symmetry", self.sym_r2)
+        form_r2.addRow(_wrap_label("Symmetry"), self.sym_r2)
         #12 Particle Dimensions
         self.dim_r2 = QtWidgets.QSpinBox()
         self.dim_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.dim_r2.setValue(52)
         _disable_scroll(self.dim_r2)
-        r2_form.addRow("Particle Dimensions", self.dim_r2)
+        form_r2.addRow(_wrap_label("Particle Dimensions"), self.dim_r2)
         #13 Shift limits
-        r2_shift_widget = QtWidgets.QWidget()
-        r2_sh = QtWidgets.QHBoxLayout(r2_shift_widget)
+        shift_widget_r2 = QtWidgets.QWidget()
+        sh2 = QtWidgets.QHBoxLayout(shift_widget_r2)
         self.area_search_r2_x = QtWidgets.QSpinBox()
         self.area_search_r2_x.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.area_search_r2_x.setValue(4)
@@ -357,8 +340,8 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.area_search_r2_z.setValue(8)
         self.area_search_r2_z.setMinimumWidth(30)
         _disable_scroll(self.area_search_r2_z)
-        r2_sh.addWidget(self.area_search_r2_x); r2_sh.addWidget(self.area_search_r2_y); r2_sh.addWidget(self.area_search_r2_z)
-        r2_form.addRow("Shift limits", r2_shift_widget)
+        sh2.addWidget(self.area_search_r2_x); sh2.addWidget(self.area_search_r2_y); sh2.addWidget(self.area_search_r2_z)
+        form_r2.addRow(_wrap_label("Shift limits"), shift_widget_r2)
         #14 Shift limiting way
         self.area_search_modus_r2 = QtWidgets.QComboBox()
         self.area_search_modus_r2.addItems([
@@ -369,25 +352,25 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         ])
         self.area_search_modus_r2.setCurrentText("From the center of the particle cube")
         _disable_scroll(self.area_search_modus_r2)
-        r2_form.addRow("Shift limiting way", self.area_search_modus_r2)
+        form_r2.addRow(_wrap_label("Shift limiting way"), self.area_search_modus_r2)
         #15 Separation in Tomogram
         self.separation_in_tomogram_r2 = QtWidgets.QSpinBox()
         self.separation_in_tomogram_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.separation_in_tomogram_r2.setValue(0)
         _disable_scroll(self.separation_in_tomogram_r2)
-        r2_form.addRow("Separation in Tomogram", self.separation_in_tomogram_r2)
+        form_r2.addRow(_wrap_label("Separation in Tomogram"), self.separation_in_tomogram_r2)
         #16 Basic MRA
         self.mra_r2 = QtWidgets.QSpinBox()
         self.mra_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.mra_r2.setValue(0)
         _disable_scroll(self.mra_r2)
-        r2_form.addRow("Basic MRA", self.mra_r2)
+        form_r2.addRow(_wrap_label("Basic MRA"), self.mra_r2)
         #17 Threshold parameter
         self.threshold_r2 = QtWidgets.QDoubleSpinBox()
         self.threshold_r2.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.threshold_r2.setValue(0.2)
         _disable_scroll(self.threshold_r2)
-        r2_form.addRow("Threshold parameter", self.threshold_r2)
+        form_r2.addRow(_wrap_label("Threshold parameter"), self.threshold_r2)
         #18 Threshold Mode
         self.threshold_mode_r2 = QtWidgets.QComboBox()
         self.threshold_mode_r2.addItems([
@@ -400,7 +383,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         ])
         self.threshold_mode_r2.setCurrentText("no thresholding policy")
         _disable_scroll(self.threshold_mode_r2)
-        r2_form.addRow("Threshold Mode", self.threshold_mode_r2)
+        form_r2.addRow(_wrap_label("Threshold Mode"), self.threshold_mode_r2)
         #19 Exclusion Mode
         self.exclusion_mode_r2 = QtWidgets.QComboBox()
         self.exclusion_mode_r2.addItems([
@@ -409,13 +392,13 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         ])
         self.exclusion_mode_r2.setCurrentText("No exclusion from averaging and alignment")
         _disable_scroll(self.exclusion_mode_r2)
-        r2_form.addRow("Exclusion Mode", self.exclusion_mode_r2)
+        form_r2.addRow(_wrap_label("Exclusion Mode"), self.exclusion_mode_r2)
 
-        # Ensure text inputs and dropdowns expand to the panel width
-        r2_growing = r2_form_widget.findChildren(
+        # Ensure text inputs and dropdowns expand to the panel width (R2)
+        growing_r2 = form_widget_r2.findChildren(
             (QtWidgets.QLineEdit, QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox)
         )
-        for w in r2_growing:
+        for w in growing_r2:
             if w in (
                 self.area_search_r2_x,
                 self.area_search_r2_y,
@@ -424,25 +407,19 @@ class RefinementSidePanel(QtWidgets.QSplitter):
                 continue
             if isinstance(w, QtWidgets.QComboBox):
                 w.setMinimumContentsLength(0)
-                w.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
-            # Make inputs narrower and keep them close to labels
-            w.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-            if isinstance(w, QtWidgets.QLineEdit):
-                w.setMaximumWidth(200)
-            else:
-                w.setMaximumWidth(250)
-            # Enable label word wrap to avoid overlap
-            lbl = r2_form.labelForField(w)
-            if isinstance(lbl, QtWidgets.QLabel):
-                lbl.setWordWrap(True)
+                w.setSizeAdjustPolicy(
+                    QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+                )
+            w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-        r2_scroll = QtWidgets.QScrollArea()
-        r2_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        r2_scroll.setWidgetResizable(True)
-        r2_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        r2_scroll.setWidget(r2_form_widget)
-        r2_v.addWidget(r2_scroll)
-        tabs.addTab(r2_tab, "Round 2")
+        scroll_r2 = QtWidgets.QScrollArea()
+        scroll_r2.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll_r2.setWidgetResizable(True)
+        scroll_r2.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll_r2.setWidget(form_widget_r2)
+        tabs.addTab(scroll_r2, "Round 2")
+
+        v.addWidget(tabs)
 
         self.addWidget(widget)
 

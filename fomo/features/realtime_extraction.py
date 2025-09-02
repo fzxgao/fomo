@@ -16,7 +16,7 @@ def _write_em(volume: np.ndarray, path: Path) -> None:
     write_em(path, volume, overwrite=True)
 
 
-def extract_particles_on_exit(viewer) -> None:
+def extract_particles_on_exit(viewer, tomo_idx: int = None) -> None:
     """Extract particle subvolumes when leaving picking mode.
 
     Parameters
@@ -30,7 +30,9 @@ def extract_particles_on_exit(viewer) -> None:
         return
     box_size = int(getattr(panel.box_size, "value", lambda: 40)())
 
-    tomogram_path = Path(viewer.files[viewer.idx])
+    # Tomogram index to operate on
+    idx = viewer.idx if tomo_idx is None else int(tomo_idx)
+    tomogram_path = Path(viewer.files[idx])
     tomogram_name = tomogram_path.stem
 
     root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
@@ -61,12 +63,15 @@ def extract_particles_on_exit(viewer) -> None:
                 if not line.strip():
                     continue
                 cols = line.split()
-                idx = int(cols[0])
+                entry_idx = int(cols[0])
                 key = " ".join(cols[1:])
-                existing[key] = (idx, line)
-                max_idx = max(max_idx, idx)
+                existing[key] = (entry_idx, line)
+                max_idx = max(max_idx, entry_idx)
 
-    volume = viewer.mrc_handles[viewer.idx].data  # (Z, Y, X)
+    # Safety: ensure tomogram index is valid and fetch volume
+    if not (0 <= idx < len(getattr(viewer, "mrc_handles", []))):
+        return
+    volume = viewer.mrc_handles[idx].data  # (Z, Y, X)
     half = box_size // 2
 
     seen = set()
@@ -118,10 +123,10 @@ def extract_particles_on_exit(viewer) -> None:
                 seen.add(key)
 
     # Remove particles that are no longer present
-    for key, (idx, _) in list(existing.items()):
+    for key, (entry_idx, _) in list(existing.items()):
         if key not in seen:
             try:
-                (particles_dir / f"particle_{idx:06d}.em").unlink()
+                (particles_dir / f"particle_{entry_idx:06d}.em").unlink()
             except Exception:
                 pass
             del existing[key]

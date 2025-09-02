@@ -1352,6 +1352,15 @@ class TomoViewer(QtWidgets.QWidget):
         else:
             threshold_mode = t_idx if exc_idx == 0 else t_idx * 10 + 1
 
+        # Round 2 specific modes (use identical logic)
+        area_mode_r2 = area_map[getattr(rp, "area_search_modus_r2").currentIndex()]
+        t2_idx = getattr(rp, "threshold_mode_r2").currentIndex()
+        exc2_idx = getattr(rp, "exclusion_mode_r2").currentIndex()
+        if t2_idx == 0:
+            threshold_mode_r2 = 0
+        else:
+            threshold_mode_r2 = t2_idx if exc2_idx == 0 else t2_idx * 10 + 1
+
         now = datetime.now()
         folder = f"{now.strftime('%Y_%m_%d')}_{now.strftime('%H%M')}_{param_string}"
 
@@ -1377,6 +1386,27 @@ class TomoViewer(QtWidgets.QWidget):
             "mra": rp.mra_r1.value(),
             "threshold": rp.threshold_r1.value(),
             "threshold_mode": threshold_mode,
+            # Round 2 parameters
+            "ite_r2": rp.ite_r2.value(),
+            "nref_r2": rp.nref_r2.value(),
+            "cone_range_r2": rp.cone_range_r2.value(),
+            "cone_sampling_r2": rp.cone_sampling_r2.value(),
+            "inplane_range_r2": rp.inplane_range_r2.value(),
+            "inplane_sampling_r2": rp.inplane_sampling_r2.value(),
+            "refine_r2": rp.refine_r2.value(),
+            "refine_factor_r2": rp.refine_factor_r2.value(),
+            "high_r2": rp.high_r2.value(),
+            "low_r2": rp.low_r2.value(),
+            "sym_r2": rp.sym_r2.text().replace(" ", ""),
+            "dim_r2": rp.dim_r2.value(),
+            "area_x_r2": rp.area_search_r2_x.value(),
+            "area_y_r2": rp.area_search_r2_y.value(),
+            "area_z_r2": rp.area_search_r2_z.value(),
+            "area_mode_r2": area_mode_r2,
+            "separation_r2": rp.separation_in_tomogram_r2.value(),
+            "mra_r2": rp.mra_r2.value(),
+            "threshold_r2": rp.threshold_r2.value(),
+            "threshold_mode_r2": threshold_mode_r2,
         }
         return folder, values
 
@@ -1429,7 +1459,26 @@ class TomoViewer(QtWidgets.QWidget):
             f"dvput('{folder}','separation_in_tomogram_r1',{params['separation']});",
             f"dvput('{folder}','mra_r1',{params['mra']});",
             f"dvput('{folder}','threshold_r1',{params['threshold']});",
-            f"dvput('{folder}','threshold_modus',{params['threshold_mode']});",
+            f"dvput('{folder}','threshold_modus_r1',{params['threshold_mode']});",
+            # Round 2 dvputs
+            f"dvput('{folder}','ite_r2',{params['ite_r2']});",
+            f"dvput('{folder}','nref_r2',{params['nref_r2']});",
+            f"dvput('{folder}','cone_range_r2',{params['cone_range_r2']});",
+            f"dvput('{folder}','cone_sampling_r2',{params['cone_sampling_r2']});",
+            f"dvput('{folder}','inplane_range_r2',{params['inplane_range_r2']});",
+            f"dvput('{folder}','inplane_sampling_r2',{params['inplane_sampling_r2']});",
+            f"dvput('{folder}','refine_r2',{params['refine_r2']});",
+            f"dvput('{folder}','refine_factor_r2',{params['refine_factor_r2']});",
+            f"dvput('{folder}','high_r2',{params['high_r2']});",
+            f"dvput('{folder}','low_r2',{params['low_r2']});",
+            f"dvput('{folder}','sym_r2','{params['sym_r2']}');",
+            f"dvput('{folder}','dim_r2',{params['dim_r2']});",
+            f"dvput('{folder}','area_search_r2',[{params['area_x_r2']} {params['area_y_r2']} {params['area_z_r2']}]);",
+            f"dvput('{folder}','area_search_modus_r2',{params['area_mode_r2']});",
+            f"dvput('{folder}','separation_in_tomogram_r2',{params['separation_r2']});",
+            f"dvput('{folder}','mra_r2',{params['mra_r2']});",
+            f"dvput('{folder}','threshold_r2',{params['threshold_r2']});",
+            f"dvput('{folder}','threshold_modus_r2',{params['threshold_mode_r2']});",
             f"dvunfold('{folder}');",
         ]
         with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False) as tf:

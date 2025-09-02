@@ -1,5 +1,7 @@
 # fomo/features/picking.py
 from PyQt5 import QtCore, QtGui
+import sys
+import subprocess
 import numpy as np
 from pathlib import Path
 import re
@@ -17,13 +19,31 @@ class ParticleExtractionWorker(QtCore.QObject):
         super().__init__()
         self.viewer = viewer
         self._cleanup_fn = cleanup_fn
+        # Capture the tomogram index at start so the user can navigate away
+        # while extraction proceeds for the original volume.
+        try:
+            self._tomo_idx = int(viewer.idx)
+        except Exception:
+            self._tomo_idx = None
 
     @QtCore.pyqtSlot()
     def run(self):
         self.started.emit()
         try:
-            extract_particles_on_exit(self.viewer)
-            merge_crop_tables_and_particles(Path.cwd())
+            extract_particles_on_exit(self.viewer, self._tomo_idx)
+            # Run the merge step in a separate Python process to avoid
+            # any chance of blocking the GUI via the GIL during heavy IO.
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "fomo.features.merge_particles_cli"],
+                    cwd=str(Path.cwd()),
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                # Fall back to in-process merge if subprocess fails
+                merge_crop_tables_and_particles(Path.cwd())
             self._cleanup_fn()
         finally:
             self.finished.emit()
@@ -190,6 +210,10 @@ class PickingModeHandler:
             self._extraction_thread.finished.connect(self._on_extraction_finished)
             self._extraction_thread.started.connect(self._extraction_worker.run)
             self._extraction_thread.start()
+
+            # Re-enable file switching immediately so the user can move on
+            if hasattr(self.viewer, "disable_file_switching"):
+                self.viewer.disable_file_switching(False)
 
 
         # Restore layout

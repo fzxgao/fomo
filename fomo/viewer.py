@@ -1361,6 +1361,15 @@ class TomoViewer(QtWidgets.QWidget):
         else:
             threshold_mode_r2 = t2_idx if exc2_idx == 0 else t2_idx * 10 + 1
 
+        # Round 3 specific modes (same logic as Round 2)
+        area_mode_r3 = area_map[getattr(rp, "area_search_modus_r3").currentIndex()]
+        t3_idx = getattr(rp, "threshold_mode_r3").currentIndex()
+        exc3_idx = getattr(rp, "exclusion_mode_r3").currentIndex()
+        if t3_idx == 0:
+            threshold_mode_r3 = 0
+        else:
+            threshold_mode_r3 = t3_idx if exc3_idx == 0 else t3_idx * 10 + 1
+
         now = datetime.now()
         folder = f"{now.strftime('%Y_%m_%d')}_{now.strftime('%H%M')}_{param_string}"
 
@@ -1407,6 +1416,27 @@ class TomoViewer(QtWidgets.QWidget):
             "mra_r2": rp.mra_r2.value(),
             "threshold_r2": rp.threshold_r2.value(),
             "threshold_mode_r2": threshold_mode_r2,
+            # Round 3 parameters
+            "ite_r3": rp.ite_r3.value(),
+            "nref_r3": rp.nref_r3.value(),
+            "cone_range_r3": rp.cone_range_r3.value(),
+            "cone_sampling_r3": rp.cone_sampling_r3.value(),
+            "inplane_range_r3": rp.inplane_range_r3.value(),
+            "inplane_sampling_r3": rp.inplane_sampling_r3.value(),
+            "refine_r3": rp.refine_r3.value(),
+            "refine_factor_r3": rp.refine_factor_r3.value(),
+            "high_r3": rp.high_r3.value(),
+            "low_r3": rp.low_r3.value(),
+            "sym_r3": rp.sym_r3.text().replace(" ", ""),
+            "dim_r3": rp.dim_r3.value(),
+            "area_x_r3": rp.area_search_r3_x.value(),
+            "area_y_r3": rp.area_search_r3_y.value(),
+            "area_z_r3": rp.area_search_r3_z.value(),
+            "area_mode_r3": area_mode_r3,
+            "separation_r3": rp.separation_in_tomogram_r3.value(),
+            "mra_r3": rp.mra_r3.value(),
+            "threshold_r3": rp.threshold_r3.value(),
+            "threshold_mode_r3": threshold_mode_r3,
         }
         return folder, values
 
@@ -1479,6 +1509,25 @@ class TomoViewer(QtWidgets.QWidget):
             f"dvput('{folder}','mra_r2',{params['mra_r2']});",
             f"dvput('{folder}','threshold_r2',{params['threshold_r2']});",
             f"dvput('{folder}','threshold_modus_r2',{params['threshold_mode_r2']});",
+            # Round 3 dvputs
+            f"dvput('{folder}','ite_r3',{params['ite_r3']});",
+            f"dvput('{folder}','nref_r3',{params['nref_r3']});",
+            f"dvput('{folder}','cone_range_r3',{params['cone_range_r3']});",
+            f"dvput('{folder}','cone_sampling_r3',{params['cone_sampling_r3']});",
+            f"dvput('{folder}','inplane_range_r3',{params['inplane_range_r3']});",
+            f"dvput('{folder}','inplane_sampling_r3',{params['inplane_sampling_r3']});",
+            f"dvput('{folder}','refine_r3',{params['refine_r3']});",
+            f"dvput('{folder}','refine_factor_r3',{params['refine_factor_r3']});",
+            f"dvput('{folder}','high_r3',{params['high_r3']});",
+            f"dvput('{folder}','low_r3',{params['low_r3']});",
+            f"dvput('{folder}','sym_r3','{params['sym_r3']}');",
+            f"dvput('{folder}','dim_r3',{params['dim_r3']});",
+            f"dvput('{folder}','area_search_r3',[{params['area_x_r3']} {params['area_y_r3']} {params['area_z_r3']}]);",
+            f"dvput('{folder}','area_search_modus_r3',{params['area_mode_r3']});",
+            f"dvput('{folder}','separation_in_tomogram_r3',{params['separation_r3']});",
+            f"dvput('{folder}','mra_r3',{params['mra_r3']});",
+            f"dvput('{folder}','threshold_r3',{params['threshold_r3']});",
+            f"dvput('{folder}','threshold_modus_r3',{params['threshold_mode_r3']});",
             f"dvunfold('{folder}');",
         ]
         with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False) as tf:
@@ -1573,6 +1622,11 @@ class TomoViewer(QtWidgets.QWidget):
                 slider.setMaximum(0)
                 slider.setValue(0)
                 slider.blockSignals(False)
+        # Clear subboxing interactive views if present
+        try:
+            self.refinement_panel.subboxing.clear_volume()
+        except Exception:
+            pass
 
     def _apply_refined_average(self, vol):
         """Apply refined average volume to sliders and slice views."""
@@ -1600,6 +1654,13 @@ class TomoViewer(QtWidgets.QWidget):
                 )
                 slider.blockSignals(False)
             self._update_refined_slice(axis, vol.shape[axis] // 2)
+        # Update subboxing views with the refined volume
+        try:
+            self.refinement_panel.subboxing.set_volume(
+                vol, self._refined_avg_min, self._refined_avg_max
+            )
+        except Exception:
+            pass
 
 
     def _load_latest_refined_average(self):
@@ -1627,10 +1688,44 @@ class TomoViewer(QtWidgets.QWidget):
         self._last_refine_iter = n
         self._refine_folder = latest.parents[3].name
 
+    def _load_latest_average_from_dir(self, align_dir) -> bool:
+        """Load and display the latest average from a specific alignment directory.
+
+        Returns True if an average was found and applied, else False.
+        """
+        results = Path(align_dir) / "results"
+        try:
+            candidates = list(
+                results.glob("ite_*/averages/average_ref_001_ite_*.em")
+            )
+        except Exception:
+            candidates = []
+        if not candidates:
+            return False
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        try:
+            header, vol = read_em(latest)
+            vol = np.transpose(vol, (2, 1, 0))
+        except Exception:
+            return False
+        nums = re.findall(r"\d+", latest.name)
+        if nums:
+            try:
+                self._last_refine_iter = int(nums[-1])
+            except Exception:
+                pass
+        self._apply_refined_average(vol)
+        return True
+
 
     def _check_refinement_results(self, align_dir, max_ite):
         results = align_dir / "results"
+        proc_finished = bool(self._refine_run_proc and self._refine_run_proc.poll() is not None)
         if not results.exists():
+            # If the subprocess finished but there are no results, stop polling.
+            if proc_finished:
+                self._load_latest_average_from_dir(align_dir)
+                self._finish_refinement()
             return
         try:
             candidates = list(
@@ -1639,6 +1734,10 @@ class TomoViewer(QtWidgets.QWidget):
         except Exception:
             candidates = []
         if not candidates:
+            # No averages yet; if the subprocess is done, finalize and stop.
+            if proc_finished:
+                self._load_latest_average_from_dir(align_dir)
+                self._finish_refinement()
             return
         latest = max(candidates, key=lambda p: p.stat().st_mtime)
         nums = re.findall(r"\d+", latest.name)
@@ -1646,7 +1745,9 @@ class TomoViewer(QtWidgets.QWidget):
             return
         n = int(nums[-1])
         if n <= self._last_refine_iter:
-            if self._refine_run_proc and self._refine_run_proc.poll() is not None:
+            if proc_finished:
+                # Ensure we are showing the latest and then finalize.
+                self._load_latest_average_from_dir(align_dir)
                 self._finish_refinement()
             return
         try:
@@ -1663,9 +1764,7 @@ class TomoViewer(QtWidgets.QWidget):
         ):
             return
         self._apply_refined_average(vol)
-        if n >= max_ite or (
-            self._refine_run_proc and self._refine_run_proc.poll() is not None
-        ):
+        if n >= max_ite or proc_finished:
             self._finish_refinement()
 
     def _update_refined_slice(self, axis, idx):

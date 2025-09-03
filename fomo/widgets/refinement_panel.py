@@ -1,4 +1,5 @@
 from PyQt5 import QtCore, QtWidgets
+from fomo.widgets.subboxing import SubboxingWidget
 
 def _disable_scroll(widget):
     """Prevent mouse wheel events from altering widget value."""
@@ -19,13 +20,23 @@ def _link_slider_wheel(label: QtWidgets.QLabel, slider: QtWidgets.QSlider):
 
 
 class RefinementSidePanel(QtWidgets.QSplitter):
-    """Side panel shown in normal mode with refinement tools."""
+    """Side panel shown in normal mode with tabs for processing and subboxing."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(QtCore.Qt.Vertical, *args, **kwargs)
-        self._build_initial_avg_section()
-        self._build_numeric_params_section()
-        self._build_live_refinement_section()
+        tabs = QtWidgets.QTabWidget()
+        # Processing tab contains the original three sections in a splitter
+        self._proc_split = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self._proc_split.addWidget(self._build_initial_avg_section())
+        self._proc_split.addWidget(self._build_numeric_params_section())
+        self._proc_split.addWidget(self._build_live_refinement_section())
+        tabs.addTab(self._proc_split, "Processing")
+
+        # Subboxing tab
+        self.subboxing = SubboxingWidget()
+        tabs.addTab(self.subboxing, "Subboxing")
+
+        self.addWidget(tabs)
 
     # -------- Initial averaging --------
     def _build_initial_avg_section(self):
@@ -59,7 +70,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.calc_initial_right.setArrowType(QtCore.Qt.RightArrow)
         btns.addWidget(self.calc_initial_right)
         v.addLayout(btns)
-        self.addWidget(widget)
+        return widget
 
     # -------- Numerical parameters --------
     def _build_numeric_params_section(self):
@@ -455,9 +466,198 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         scroll_r2.setWidget(form_widget_r2)
         tabs.addTab(scroll_r2, "Round 2")
 
+        # ----- Round 3 ----- (same logic as Round 2)
+        form_widget_r3 = QtWidgets.QWidget()
+        form_r3 = QtWidgets.QFormLayout(form_widget_r3)
+        form_r3.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+        # 1 Iterations
+        self.ite_r3 = QtWidgets.QSpinBox()
+        self.ite_r3.setMaximum(1000000)
+        self.ite_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.ite_r3.setValue(8)
+        _disable_scroll(self.ite_r3)
+        form_r3.addRow(_wrap_label("Iterations"), self.ite_r3)
+        # 2 References
+        self.nref_r3 = QtWidgets.QSpinBox()
+        self.nref_r3.setMaximum(1000000)
+        self.nref_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.nref_r3.setValue(1)
+        _disable_scroll(self.nref_r3)
+        form_r3.addRow(_wrap_label("References"), self.nref_r3)
+        # 3 Cone Aperture
+        self.cone_range_r3 = QtWidgets.QSpinBox()
+        self.cone_range_r3.setMaximum(1000000)
+        self.cone_range_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.cone_range_r3.setValue(30)
+        _disable_scroll(self.cone_range_r3)
+        form_r3.addRow(_wrap_label("Cone Aperture"), self.cone_range_r3)
+        # 4 Cone Sampling
+        self.cone_sampling_r3 = QtWidgets.QSpinBox()
+        self.cone_sampling_r3.setMaximum(1000000)
+        self.cone_sampling_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.cone_sampling_r3.setValue(5)
+        _disable_scroll(self.cone_sampling_r3)
+        form_r3.addRow(_wrap_label("Cone Sampling"), self.cone_sampling_r3)
+        # 5 Azimuth Rotation Range
+        self.inplane_range_r3 = QtWidgets.QSpinBox()
+        self.inplane_range_r3.setMaximum(1000000)
+        self.inplane_range_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.inplane_range_r3.setValue(30)
+        _disable_scroll(self.inplane_range_r3)
+        form_r3.addRow(_wrap_label("Azimuth Rotation Range"), self.inplane_range_r3)
+        # 6 Azimuth Rotation Sampling
+        self.inplane_sampling_r3 = QtWidgets.QSpinBox()
+        self.inplane_sampling_r3.setMaximum(1000000)
+        self.inplane_sampling_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.inplane_sampling_r3.setValue(5)
+        _disable_scroll(self.inplane_sampling_r3)
+        form_r3.addRow(_wrap_label("Azimuth Rotation Sampling"), self.inplane_sampling_r3)
+        # 7 Refine
+        self.refine_r3 = QtWidgets.QSpinBox()
+        self.refine_r3.setMaximum(1000000)
+        self.refine_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.refine_r3.setValue(2)
+        _disable_scroll(self.refine_r3)
+        form_r3.addRow(_wrap_label("Refine"), self.refine_r3)
+        # 8 Refine Factor
+        self.refine_factor_r3 = QtWidgets.QSpinBox()
+        self.refine_factor_r3.setMaximum(1000000)
+        self.refine_factor_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.refine_factor_r3.setValue(2)
+        _disable_scroll(self.refine_factor_r3)
+        form_r3.addRow(_wrap_label("Refine Factor"), self.refine_factor_r3)
+        # 9 High Pass
+        self.high_r3 = QtWidgets.QSpinBox()
+        self.high_r3.setMaximum(1000000)
+        self.high_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.high_r3.setValue(1)
+        _disable_scroll(self.high_r3)
+        form_r3.addRow(_wrap_label("High Pass"), self.high_r3)
+        #10 Low Pass
+        self.low_r3 = QtWidgets.QSpinBox()
+        self.low_r3.setMaximum(1000000)
+        self.low_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.low_r3.setValue(12)
+        _disable_scroll(self.low_r3)
+        form_r3.addRow(_wrap_label("Low Pass"), self.low_r3)
+        #11 Symmetry
+        self.sym_r3 = QtWidgets.QLineEdit("C1")
+        form_r3.addRow(_wrap_label("Symmetry"), self.sym_r3)
+        #12 Particle Dimensions
+        self.dim_r3 = QtWidgets.QSpinBox()
+        self.dim_r3.setMaximum(1000000)
+        self.dim_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.dim_r3.setValue(52)
+        _disable_scroll(self.dim_r3)
+        form_r3.addRow(_wrap_label("Particle Dimensions"), self.dim_r3)
+        #13 Shift limits
+        shift_widget_r3 = QtWidgets.QWidget()
+        sh3 = QtWidgets.QHBoxLayout(shift_widget_r3)
+        self.area_search_r3_x = QtWidgets.QSpinBox()
+        self.area_search_r3_x.setMaximum(1000000)
+        self.area_search_r3_x.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.area_search_r3_x.setValue(1)
+        self.area_search_r3_x.setMinimumWidth(30)
+        _disable_scroll(self.area_search_r3_x)
+        self.area_search_r3_y = QtWidgets.QSpinBox()
+        self.area_search_r3_y.setMaximum(1000000)
+        self.area_search_r3_y.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.area_search_r3_y.setValue(1)
+        self.area_search_r3_y.setMinimumWidth(30)
+        _disable_scroll(self.area_search_r3_y)
+        self.area_search_r3_z = QtWidgets.QSpinBox()
+        self.area_search_r3_z.setMaximum(1000000)
+        self.area_search_r3_z.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.area_search_r3_z.setValue(0)
+        self.area_search_r3_z.setMinimumWidth(30)
+        _disable_scroll(self.area_search_r3_z)
+        sh3.addWidget(self.area_search_r3_x); sh3.addWidget(self.area_search_r3_y); sh3.addWidget(self.area_search_r3_z)
+        form_r3.addRow(_wrap_label("Shift limits"), shift_widget_r3)
+        #14 Shift limiting way
+        self.area_search_modus_r3 = QtWidgets.QComboBox()
+        self.area_search_modus_r3.addItems([
+            "No limitations",
+            "From the center of the particle cube",
+            "From the previous estimation on the particle position",
+            "From the estimation provided for the first iteration, with static origin",
+        ])
+        self.area_search_modus_r3.setCurrentText("From the center of the particle cube")
+        _disable_scroll(self.area_search_modus_r3)
+        form_r3.addRow(_wrap_label("Shift limiting way"), self.area_search_modus_r3)
+        #15 Separation in Tomogram
+        self.separation_in_tomogram_r3 = QtWidgets.QSpinBox()
+        self.separation_in_tomogram_r3.setMaximum(1000000)
+        self.separation_in_tomogram_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.separation_in_tomogram_r3.setValue(0)
+        _disable_scroll(self.separation_in_tomogram_r3)
+        form_r3.addRow(_wrap_label("Separation in Tomogram"), self.separation_in_tomogram_r3)
+        #16 Basic MRA
+        self.mra_r3 = QtWidgets.QSpinBox()
+        self.mra_r3.setMaximum(1000000)
+        self.mra_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.mra_r3.setValue(0)
+        _disable_scroll(self.mra_r3)
+        form_r3.addRow(_wrap_label("Basic MRA"), self.mra_r3)
+        #17 Threshold parameter
+        self.threshold_r3 = QtWidgets.QDoubleSpinBox()
+        self.threshold_r3.setMaximum(1000000.0)
+        self.threshold_r3.setDecimals(6)
+        self.threshold_r3.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        self.threshold_r3.setValue(0.2)
+        _disable_scroll(self.threshold_r3)
+        form_r3.addRow(_wrap_label("Threshold parameter"), self.threshold_r3)
+        #18 Threshold Mode
+        self.threshold_mode_r3 = QtWidgets.QComboBox()
+        self.threshold_mode_r3.addItems([
+            "no thresholding policy",
+            "Threshold is an absolute threshold (only particles with CC above this value are selected).",
+            "Effective threshold = mean(CC) * THRESHOLD.",
+            "Effective threshold = mean(CC) +std(CC)*THRESHOLD.",
+            "Threshold is the total number of particles (ordered by CC ).",
+            "Threshold ranges between 0 and 1  and sets the fraction of particles.",
+        ])
+        self.threshold_mode_r3.setCurrentText("no thresholding policy")
+        _disable_scroll(self.threshold_mode_r3)
+        form_r3.addRow(_wrap_label("Threshold Mode"), self.threshold_mode_r3)
+        #19 Exclusion Mode
+        self.exclusion_mode_r3 = QtWidgets.QComboBox()
+        self.exclusion_mode_r3.addItems([
+            "No exclusion from averaging and alignment",
+            "Exclusion from averaging and alignment",
+        ])
+        self.exclusion_mode_r3.setCurrentText("No exclusion from averaging and alignment")
+        _disable_scroll(self.exclusion_mode_r3)
+        form_r3.addRow(_wrap_label("Exclusion Mode"), self.exclusion_mode_r3)
+
+        # Ensure text inputs and dropdowns expand to the panel width (R3)
+        growing_r3 = form_widget_r3.findChildren(
+            (QtWidgets.QLineEdit, QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox)
+        )
+        for w in growing_r3:
+            if w in (
+                self.area_search_r3_x,
+                self.area_search_r3_y,
+                self.area_search_r3_z,
+            ):
+                continue
+            if isinstance(w, QtWidgets.QComboBox):
+                w.setMinimumContentsLength(0)
+                w.setSizeAdjustPolicy(
+                    QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+                )
+            w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+        scroll_r3 = QtWidgets.QScrollArea()
+        scroll_r3.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll_r3.setWidgetResizable(True)
+        scroll_r3.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll_r3.setWidget(form_widget_r3)
+        tabs.addTab(scroll_r3, "Round 3")
+
         v.addWidget(tabs)
 
-        self.addWidget(widget)
+        return widget
 
     # -------- Live refinement --------
     def _build_live_refinement_section(self):
@@ -497,7 +697,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         self.export_relion_btn = QtWidgets.QPushButton("Export to RELION")
         btns.addWidget(self.export_relion_btn)
         v.addLayout(btns)
-        self.addWidget(widget)
+        return widget
 
     def wheelEvent(self, event):
         event.ignore()

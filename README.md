@@ -9,6 +9,7 @@ It supports fast Z-slicing, contrast adjustment via histogram, dual XY/XZ panels
 - Dual XY and XZ slice views
 - Interactive contrast adjustment with histogram
 - Scroll acceleration for fast slicing
+- Fully functional over secure shell with X11 forwarding
 - Picking mode with custom plane resampling
 - Modular architecture for easy extension
 

@@ -13,6 +13,9 @@ It supports fast Z-slicing, contrast adjustment via histogram, dual XY/XZ panels
 - Modular architecture for easy extension
 
 ## Installation
+### Dependencies
+Fomo depends on WarpTools and Dynamo. 
+
 Clone the repository and install the required dependencies:
 ```bash
 pip install -r requirements.txt

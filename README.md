@@ -11,6 +11,8 @@ It supports fast Z-slicing, contrast adjustment via histogram, dual XY/XZ panels
 - Scroll acceleration for fast slicing
 - Fully functional over secure shell with X11 forwarding
 - Picking mode with custom plane resampling
+- PAST - Pick and Align (at the Same Time)
+- Estimation of helical parameters and subboxing
 - Modular architecture for easy extension
 
 ## Installation

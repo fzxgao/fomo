@@ -1,2 +1,0 @@
-[console_scripts]
-fomo = fomo.cli:main

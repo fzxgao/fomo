@@ -7,10 +7,13 @@ class SliceView(QtWidgets.QGraphicsView):
     dragged = QtCore.pyqtSignal(int, int)
     released = QtCore.pyqtSignal()
     wheel_delta = QtCore.pyqtSignal(int)
+    # Extended signal including mouse button and keyboard modifiers (as ints)
+    clicked_ex = QtCore.pyqtSignal(int, int, int, int)
 
     def __init__(self, *, verbose=False, name="view",
                  scroll_base=4, scroll_threshold=2.0,
-                 scroll_mult=0.01, scroll_max_streak=4):
+                 scroll_mult=0.01, scroll_max_streak=4,
+                 sample_scale=1):
         super().__init__()
         self._verbose = verbose
         self._name = name
@@ -19,6 +22,7 @@ class SliceView(QtWidgets.QGraphicsView):
         self._STREAK_THRESHOLD = float(scroll_threshold)
         self._STREAK_MULT = float(scroll_mult)
         self._STREAK_MAX = int(scroll_max_streak)
+        self._sample_scale = int(sample_scale) if int(sample_scale) > 0 else 1
 
         self.setScene(QtWidgets.QGraphicsScene(self))
         self.pixmap_item = self.scene().addPixmap(QtGui.QPixmap())
@@ -31,8 +35,12 @@ class SliceView(QtWidgets.QGraphicsView):
         self.vline.setVisible(False)
         self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        # Displayed image dimensions (scene coordinates)
         self.img_w = 1
         self.img_h = 1
+        # Source image dimensions (logical pixel grid)
+        self.src_w = 1
+        self.src_h = 1
         self.dynamic_fit = True
         self._drag_active = False
 
@@ -43,17 +51,34 @@ class SliceView(QtWidgets.QGraphicsView):
         self._tmp_drag_mode = None
 
     def set_image(self, qimg):
-        self.img_w = qimg.width()
-        self.img_h = qimg.height()
-        self.pixmap_item.setPixmap(QtGui.QPixmap.fromImage(qimg))
+        # Original image size
+        self.src_w = qimg.width()
+        self.src_h = qimg.height()
+        # Displayed size with supersampling
+        self.img_w = self.src_w * self._sample_scale
+        self.img_h = self.src_h * self._sample_scale
+        if self._sample_scale != 1:
+            try:
+                qimg_disp = qimg.scaled(
+                    self.img_w,
+                    self.img_h,
+                    transformMode=QtCore.Qt.FastTransformation,
+                )
+            except Exception:
+                qimg_disp = qimg
+        else:
+            qimg_disp = qimg
+        self.pixmap_item.setPixmap(QtGui.QPixmap.fromImage(qimg_disp))
         self.scene().setSceneRect(0, 0, self.img_w, self.img_h)
         if self.dynamic_fit:
             self.fit_height()
         self.viewport().update()
 
     def set_crosshair(self, x, y):
-        self.hline.setLine(0, y + 0.5, self.img_w, y + 0.5)
-        self.vline.setLine(x + 0.5, 0, x + 0.5, self.img_h)
+        sx = x * self._sample_scale
+        sy = y * self._sample_scale
+        self.hline.setLine(0, sy + 0.5, self.img_w, sy + 0.5)
+        self.vline.setLine(sx + 0.5, 0, sx + 0.5, self.img_h)
         self.hline.setVisible(True)
         self.vline.setVisible(True)
 
@@ -113,14 +138,17 @@ class SliceView(QtWidgets.QGraphicsView):
         ev.accept()
 
     def mousePressEvent(self, ev):
-        if ev.button() == QtCore.Qt.LeftButton:
+        if ev.button() in (QtCore.Qt.LeftButton, QtCore.Qt.RightButton):
             pos = self.mapToScene(ev.pos())
             x_f, y_f = pos.x(), pos.y()
             if 0 <= x_f < self.img_w and 0 <= y_f < self.img_h:
-                x = int(np.clip(round(x_f), 0, self.img_w - 1))
-                y = int(np.clip(round(y_f), 0, self.img_h - 1))
-                self.clicked.emit(x, y)
-                self._drag_active = True
+                x = int(np.clip(round(x_f / self._sample_scale), 0, self.src_w - 1))
+                y = int(np.clip(round(y_f / self._sample_scale), 0, self.src_h - 1))
+                if ev.button() == QtCore.Qt.LeftButton:
+                    self.clicked.emit(x, y)
+                    self._drag_active = True
+                # Always emit extended click with button + modifiers
+                self.clicked_ex.emit(x, y, int(ev.button()), int(ev.modifiers()))
             else:
                 if self._picking_mode:
                     self._tmp_drag_mode = self.dragMode()
@@ -132,8 +160,8 @@ class SliceView(QtWidgets.QGraphicsView):
     def mouseMoveEvent(self, ev):
         if self._drag_active:
             pos = self.mapToScene(ev.pos())
-            x = int(np.clip(round(pos.x()), 0, self.img_w - 1))
-            y = int(np.clip(round(pos.y()), 0, self.img_h - 1))
+            x = int(np.clip(round(pos.x() / self._sample_scale), 0, self.src_w - 1))
+            y = int(np.clip(round(pos.y() / self._sample_scale), 0, self.src_h - 1))
             self.dragged.emit(x, y)
         super().mouseMoveEvent(ev)
 

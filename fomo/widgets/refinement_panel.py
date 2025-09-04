@@ -22,7 +22,7 @@ def _link_slider_wheel(label: QtWidgets.QLabel, slider: QtWidgets.QSlider):
 class RefinementSidePanel(QtWidgets.QSplitter):
     """Side panel shown in normal mode with tabs for processing and subboxing."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, verbose=False, **kwargs):
         super().__init__(QtCore.Qt.Vertical, *args, **kwargs)
         tabs = QtWidgets.QTabWidget()
         # Processing tab contains the original three sections in a splitter
@@ -33,7 +33,7 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         tabs.addTab(self._proc_split, "Processing")
 
         # Subboxing tab
-        self.subboxing = SubboxingWidget()
+        self.subboxing = SubboxingWidget(verbose=verbose)
         tabs.addTab(self.subboxing, "Subboxing")
 
         self.addWidget(tabs)
@@ -694,6 +694,46 @@ class RefinementSidePanel(QtWidgets.QSplitter):
         btns.addLayout(import_row)
         self.ransac_btn = QtWidgets.QPushButton("Run RANSAC")
         btns.addWidget(self.ransac_btn)
+
+        # Parameters for RELION export (appear above the export button)
+        relion_form = QtWidgets.QFormLayout()
+        relion_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+        def _wrap_label(text: str) -> QtWidgets.QLabel:
+            lbl = QtWidgets.QLabel(text)
+            lbl.setWordWrap(True)
+            lbl.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            return lbl
+
+        # Output pixel size (angstroms per pixel)
+        self.relion_output_angpix = QtWidgets.QDoubleSpinBox()
+        self.relion_output_angpix.setDecimals(3)
+        self.relion_output_angpix.setMinimum(0.001)
+        self.relion_output_angpix.setMaximum(100000.0)
+        self.relion_output_angpix.setValue(4.0)
+        self.relion_output_angpix.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        _disable_scroll(self.relion_output_angpix)
+        relion_form.addRow(_wrap_label("Output pixel size"), self.relion_output_angpix)
+
+        # Box size in pixels
+        self.relion_warpbox = QtWidgets.QSpinBox()
+        self.relion_warpbox.setMinimum(1)
+        self.relion_warpbox.setMaximum(1000000)
+        self.relion_warpbox.setValue(128)
+        self.relion_warpbox.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        _disable_scroll(self.relion_warpbox)
+        relion_form.addRow(_wrap_label("Box size (pixels)"), self.relion_warpbox)
+
+        # Particle diameter in angstroms
+        self.relion_warp_diameter = QtWidgets.QSpinBox()
+        self.relion_warp_diameter.setMinimum(1)
+        self.relion_warp_diameter.setMaximum(1000000)
+        self.relion_warp_diameter.setValue(220)
+        self.relion_warp_diameter.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+        _disable_scroll(self.relion_warp_diameter)
+        relion_form.addRow(_wrap_label("Particle diameter (angstroms)"), self.relion_warp_diameter)
+
+        btns.addLayout(relion_form)
         self.export_relion_btn = QtWidgets.QPushButton("Export to RELION")
         btns.addWidget(self.export_relion_btn)
         v.addLayout(btns)

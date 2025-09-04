@@ -23,10 +23,65 @@ def _wrap_label(text: str) -> QtWidgets.QLabel:
     return lbl
 
 
+class _AxisGlyph(QtWidgets.QWidget):
+    """Tiny axes glyph drawn in a dedicated widget.
+
+    Draws an L-shaped axis with labels: horizontal (x_label) to the right,
+    vertical (y_label) upwards. Styled in white to match the UI.
+    """
+
+    def __init__(self, x_label: str, y_label: str, parent=None):
+        super().__init__(parent)
+        self._x_label = str(x_label)
+        self._y_label = str(y_label)
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.setFixedWidth(42)
+        self.setMinimumHeight(44)
+        self._margin = 4
+
+    def sizeHint(self):  # pragma: no cover - layout sizing
+        return QtCore.QSize(42, 44)
+
+    def paintEvent(self, event):  # pragma: no cover - GUI painting
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        col = QtGui.QColor(255, 255, 255)
+        pen = QtGui.QPen(col)
+        pen.setWidth(1)
+        p.setPen(pen)
+
+        w = self.width()
+        h = self.height()
+        m = self._margin
+        L = max(8, min(14, h // 3))  # small
+        ox = m + 8  # shift slightly from very edge
+        oy = h - m - 6
+
+        # axes lines
+        p.drawLine(ox, oy, ox + L, oy)      # horizontal (x)
+        p.drawLine(ox, oy, ox, oy - L)      # vertical (y)
+
+        # labels
+        font = p.font()
+        font.setPointSizeF(8.0)
+        p.setFont(font)
+        fm = QtGui.QFontMetrics(font)
+        # Horizontal label at end of axis, clamped inside widget and aligned to the line
+        tx_w = fm.horizontalAdvance(self._x_label)
+        x_text_x = min(w - tx_w - 2, ox + L + 2)
+        x_text_y = min(h - 2, oy + fm.ascent() - 2)
+        p.drawText(QtCore.QPointF(x_text_x, x_text_y), self._x_label)
+        # Vertical label near top of vertical axis
+        ty_w = fm.horizontalAdvance(self._y_label)
+        y_text_x = max(2, ox - ty_w - 2)
+        p.drawText(QtCore.QPointF(y_text_x, oy - L - 2), self._y_label)
+
+
 class SubboxingWidget(QtWidgets.QWidget):
     """Subboxing tab with interactive views and calculated parameters.
 
-    - Interactive: shows XY, YZ, XZ slices of the refined volume.
+    - Interactive: shows XY (top), XZ (middle), YZ (bottom) slices.
     - Calculated parameters: fixed-height (300px) scrollable form with wrapped labels.
     """
 
@@ -73,6 +128,8 @@ class SubboxingWidget(QtWidgets.QWidget):
         self.n_unique.setRange(1, 1_000_000)
         self.n_unique.setValue(1)
         _disable_scroll(self.n_unique)
+        # Changing unique ASUs clears interactive picks to avoid inconsistencies
+        self.n_unique.valueChanged.connect(self._clear_interactive_points_on_param_change)
         inter_form.addRow(
             _wrap_label("Number of unique asymmetrical units"), self.n_unique
         )
@@ -81,6 +138,8 @@ class SubboxingWidget(QtWidgets.QWidget):
         self.n_per_segment.setRange(1, 1_000_000)
         self.n_per_segment.setValue(6)
         _disable_scroll(self.n_per_segment)
+        # Changing per-segment count clears interactive picks to avoid inconsistencies
+        self.n_per_segment.valueChanged.connect(self._clear_interactive_points_on_param_change)
         inter_form.addRow(
             _wrap_label("Number of subunits per repeating segment"),
             self.n_per_segment,
@@ -99,17 +158,30 @@ class SubboxingWidget(QtWidgets.QWidget):
             # Force default arrow cursor and disable hand-drag mode
             v.setDragMode(QtWidgets.QGraphicsView.NoDrag)
             v.viewport().setCursor(QtCore.Qt.ArrowCursor)
-        # Add views without labels in order: YZ (top), XZ (middle), XY (bottom)
+        # Add views in order: YZ (top), XZ (middle), XY (bottom)
         layout.addWidget(self.view_yz, 1)
         layout.addWidget(self.view_xz, 1)
         layout.addWidget(self.view_xy, 1)
 
+        # Axes overlays inside each view's bottom-left black margin
+        # Orientation per spec:
+        #  - Top: Y vertical, X horizontal
+        #  - Middle: Z vertical, X horizontal
+        #  - Bottom: Y vertical, Z horizontal
+        self._axis_overlay_yz = _AxisGlyph(x_label="x", y_label="y", parent=self.view_yz.viewport())
+        self._axis_overlay_xz = _AxisGlyph(x_label="x", y_label="z", parent=self.view_xz.viewport())
+        self._axis_overlay_xy = _AxisGlyph(x_label="z", y_label="y", parent=self.view_xy.viewport())
+        for ow in (self._axis_overlay_yz, self._axis_overlay_xz, self._axis_overlay_xy):
+            ow.setStyleSheet("background: transparent;")
+            ow.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+            ow.show()
+
         # Click handlers: update (cx, cy, cz) and refresh all views
-        # Top: YZ
+        # Top: XY
         self.view_yz.clicked.connect(self._clicked_yz)
         # Middle: XZ
         self.view_xz.clicked.connect(self._clicked_xz)
-        # Bottom: XY
+        # Bottom: YZ
         self.view_xy.clicked.connect(self._clicked_xy)
         # Extended click handling (ctrl/left/right)
         self.view_yz.clicked_ex.connect(lambda x, y, b, m: self._on_click_ex("YZ", x, y, b, m))
@@ -122,11 +194,11 @@ class SubboxingWidget(QtWidgets.QWidget):
         self._scroll_accum_x = 0.0
         self._scroll_accum_y = 0.0
         # Scroll wheel slicing per-plane
-        # Top YZ: scroll X
+        # Top XY: scroll Z
         self.view_yz.wheel_delta.connect(self._scroll_x)
         # Middle XZ: scroll Y
         self.view_xz.wheel_delta.connect(self._scroll_y)
-        # Bottom XY: scroll Z
+        # Bottom YZ: scroll X
         self.view_xy.wheel_delta.connect(self._scroll_z)
 
         # Bottom: import + calculate buttons (separate rows)
@@ -146,14 +218,14 @@ class SubboxingWidget(QtWidgets.QWidget):
         form = QtWidgets.QFormLayout(calc_inner)
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
 
-        # Tube diameter (Å)
-        self.tube_diam = QtWidgets.QDoubleSpinBox()
-        self.tube_diam.setDecimals(3)
-        self.tube_diam.setRange(-1e9, 1e9)
-        self.tube_diam.setValue(0.0)
-        self.tube_diam.setToolTip("In angstroms")
-        _disable_scroll(self.tube_diam)
-        form.addRow(_wrap_label("Tube diameter"), self.tube_diam)
+        # Filament diameter (Å)
+        self.filament_diam = QtWidgets.QDoubleSpinBox()
+        self.filament_diam.setDecimals(3)
+        self.filament_diam.setRange(-1e9, 1e9)
+        self.filament_diam.setValue(150.0)
+        self.filament_diam.setToolTip("In angstroms")
+        _disable_scroll(self.filament_diam)
+        form.addRow(_wrap_label("Filament diameter"), self.filament_diam)
 
         # Symmetry (text)
         self.symmetry = QtWidgets.QLineEdit("C1")
@@ -198,6 +270,10 @@ class SubboxingWidget(QtWidgets.QWidget):
         form.addRow(_wrap_label("Rise"), self.rise)
 
         # Bottom of calculated section
+        # Plot coordinates button (requested above Calculate subboxed)
+        self.btn_plot_coords = QtWidgets.QPushButton("Plot calculated coordinates")
+        form.addRow(self.btn_plot_coords)
+
         self.btn_calc_subboxed = QtWidgets.QPushButton("Calculate subboxed coordinates")
         form.addRow(self.btn_calc_subboxed)
         self.subbox_size = QtWidgets.QSpinBox()
@@ -218,6 +294,7 @@ class SubboxingWidget(QtWidgets.QWidget):
         self.btn_import_refined.clicked.connect(lambda: self.import_refined_requested.emit())
         self.btn_export_relion.clicked.connect(lambda: self.export_subboxed_requested.emit())
         self.btn_calc_subboxed.clicked.connect(lambda: self.calculate_subboxed_requested.emit())
+        self.btn_plot_coords.clicked.connect(self._toggle_plot_coordinates)
 
         # Try auto-loading the latest refined average
         QtCore.QTimer.singleShot(0, self._auto_load_latest)
@@ -241,6 +318,8 @@ class SubboxingWidget(QtWidgets.QWidget):
         self._cy = Y // 2
         self._cz = Z // 2
         self._refresh_all()
+        # Plotted (generated) points become invalid when the volume changes
+        self._reset_plotted_points()
 
     def clear_volume(self):
         self._vol = None
@@ -252,6 +331,8 @@ class SubboxingWidget(QtWidgets.QWidget):
         self._asu_points.clear()
         self._current_asu = None
         self._current_idx = None
+        # Also reset generated/plot points
+        self._reset_plotted_points()
 
     # ---- Auto-load latest average ----
     def _auto_load_latest(self):
@@ -320,11 +401,19 @@ class SubboxingWidget(QtWidgets.QWidget):
         self.view_yz.set_crosshair(self._cz, self._cy)
 
         # XZ: y fixed -> transpose to make Z horizontal (width=Z, height=X)
+        # Then rotate by 180° (flip both axes) as requested
         xz = self._vol[:, self._cy, :]  # (Z, X)
-        qimg_xz = self._norm_to_qimage(xz.T)  # (X, Z)
+        xz_t = xz.T  # (X, Z)
+        xz_t_flip = np.flip(xz_t, axis=(0, 1))  # 180° rotation
+        qimg_xz = self._norm_to_qimage(xz_t_flip)
         self.view_xz.set_image(qimg_xz)
-        # Crosshair: x=Z, y=X
-        self.view_xz.set_crosshair(self._cz, self._cx)
+        # Crosshair: image coords after 180° flip
+        Z, Y, X = self._vol.shape
+        cx_disp = (Z - 1) - int(self._cz)
+        cy_disp = (X - 1) - int(self._cx)
+        self.view_xz.set_crosshair(cx_disp, cy_disp)
+        # Position axes overlays inside the views
+        self._position_axis_overlays()
         # Draw markers
         self._render_markers()
 
@@ -345,7 +434,9 @@ class SubboxingWidget(QtWidgets.QWidget):
         if self._vol is None:
             return
         # x = Z, y = X in the XZ view (transposed)
-        self._cz, self._cx = int(x), int(y)
+        # After 180° rotation, both axes are flipped
+        Z, Y, X = self._vol.shape
+        self._cz, self._cx = int((Z - 1) - x), int((X - 1) - y)
         self._refresh_all()
 
     # ---- Mouse wheel slicing functions ----
@@ -420,8 +511,11 @@ class SubboxingWidget(QtWidgets.QWidget):
             xyz = (int(x), int(y), int(self._cz))
         elif view_name == "YZ":  # transposed: (Z, Y)
             xyz = (int(self._cx), int(y), int(x))
-        else:  # XZ transposed: (Z, X)
-            xyz = (int(y), int(self._cy), int(x))
+        else:  # XZ transposed: (Z, X) with 180° rotation (flip both axes)
+            Z, Y, X = self._vol.shape
+            xi = int((X - 1) - y)
+            zi = int((Z - 1) - x)
+            xyz = (xi, int(self._cy), zi)
 
         # Ctrl+Left starts a new ASU
         if (btn == QtCore.Qt.LeftButton) and (mods & QtCore.Qt.ControlModifier):
@@ -432,6 +526,7 @@ class SubboxingWidget(QtWidgets.QWidget):
             self._current_idx = 0
             self._ensure_asu_colors(len(self._asu_points))
             self._refresh_all()
+            self._reset_plotted_points()
             return
 
         # Left click appends to current ASU
@@ -444,6 +539,7 @@ class SubboxingWidget(QtWidgets.QWidget):
             pts.append(xyz)
             self._current_idx = len(pts) - 1
             self._refresh_all()
+            self._reset_plotted_points()
             return
 
         # Right click adjusts current point
@@ -457,6 +553,7 @@ class SubboxingWidget(QtWidgets.QWidget):
             idx = int(np.clip(idx, 0, len(pts) - 1))
             pts[idx] = xyz
             self._refresh_all()
+            self._reset_plotted_points()
 
     def _render_markers(self):
         # Remove old markers
@@ -475,6 +572,19 @@ class SubboxingWidget(QtWidgets.QWidget):
                 except Exception:
                     pass
             items.clear()
+        # Remove previously plotted generated markers (circles)
+        for items in (getattr(self, "_plot_marker_items_xy", []),
+                      getattr(self, "_plot_marker_items_yz", []),
+                      getattr(self, "_plot_marker_items_xz", [])):
+            for it in items:
+                try:
+                    it.scene().removeItem(it)
+                except Exception:
+                    pass
+            try:
+                items.clear()
+            except Exception:
+                pass
         if self._vol is None:
             return
         # Base half-length of marker crosses (scene units before supersampling)
@@ -504,7 +614,7 @@ class SubboxingWidget(QtWidgets.QWidget):
                     self._marker_items_xy.extend(
                         self._add_cross(self.view_xy.scene(), x * sxy, y * sxy, half * sxy, pen_xy)
                     )
-                # YZ view (top): fade by distance from current X, draw at (Z, Y)
+                # YZ view (bottom): fade by distance from current X, draw at (Z, Y)
                 dist_yz = abs(int(x) - int(self._cx))
                 if dist_yz <= fade_dist:
                     alpha = max(0.0, 1.0 - (dist_yz / float(fade_dist)))
@@ -527,8 +637,11 @@ class SubboxingWidget(QtWidgets.QWidget):
                     pen_xz.setWidth(2)
                     pen_xz.setCosmetic(True)
                     sxz = getattr(self.view_xz, "_sample_scale", 1)
+                    # 180° flip: display coords are reversed along both axes
+                    z_disp = (Z - 1 - int(z)) * sxz
+                    x_disp = (X - 1 - int(x)) * sxz
                     self._marker_items_xz.extend(
-                        self._add_cross(self.view_xz.scene(), z * sxz, x * sxz, half * sxz, pen_xz)
+                        self._add_cross(self.view_xz.scene(), z_disp, x_disp, half * sxz, pen_xz)
                     )
 
             # Overlays per segment: YZ twist arcs, XZ rise labels
@@ -587,14 +700,71 @@ class SubboxingWidget(QtWidgets.QWidget):
                     riseA = abs(float(x2) - float(x1)) * pixA
                     label = f"rise {riseA:.2f} Å"
                     sxz = getattr(self.view_xz, "_sample_scale", 1)
-                    mx = (float(z1) + float(z2)) * 0.5 * sxz  # Z (horizontal)
-                    my = (float(x1) + float(x2)) * 0.5 * sxz  # X (vertical)
+                    # 180° flip: invert coordinates when placing label
+                    mz = (float(z1) + float(z2)) * 0.5
+                    mx = (Z - 1 - mz) * sxz  # horizontal position (Z)
+                    mx = float(mx)
+                    myx = (float(x1) + float(x2)) * 0.5
+                    my = (X - 1 - myx) * sxz  # vertical position (X)
                     text_item = QtWidgets.QGraphicsTextItem(label)
                     col_txt = QtGui.QColor(255, 255, 255, int(alpha * 255))
                     text_item.setDefaultTextColor(col_txt)
                     text_item.setPos(mx + 4, my + 4)
                     self.view_xz.scene().addItem(text_item)
                     self._overlay_items_xz.append(text_item)
+
+        # Draw generated/plotted coordinates as circles (same visual size as crosses)
+        plot_pts = getattr(self, "_plotted_points", None)
+        if plot_pts:
+            self._plot_marker_items_xy = []
+            self._plot_marker_items_yz = []
+            self._plot_marker_items_xz = []
+            for asu_idx, pts in enumerate(plot_pts):
+                if not pts:
+                    continue
+                base_col = self._asu_colors[min(asu_idx, len(self._asu_colors) - 1)]
+                for (x, y, z) in pts:
+                    # XY view: fade by distance from current Z
+                    dist_xy = abs(int(z) - int(self._cz))
+                    if dist_xy <= fade_dist:
+                        alpha = max(0.0, 1.0 - (dist_xy / float(fade_dist)))
+                        col_xy = QtGui.QColor(base_col)
+                        col_xy.setAlpha(int(alpha * 255))
+                        pen_xy = QtGui.QPen(col_xy)
+                        pen_xy.setWidth(2)
+                        pen_xy.setCosmetic(True)
+                        sxy = getattr(self.view_xy, "_sample_scale", 1)
+                        self._plot_marker_items_xy.append(
+                            self._add_circle(self.view_xy.scene(), x * sxy, y * sxy, half * sxy, pen_xy)
+                        )
+                    # YZ view (x fixed): draw at (Z, Y)
+                    dist_yz = abs(int(x) - int(self._cx))
+                    if dist_yz <= fade_dist:
+                        alpha = max(0.0, 1.0 - (dist_yz / float(fade_dist)))
+                        col_yz = QtGui.QColor(base_col)
+                        col_yz.setAlpha(int(alpha * 255))
+                        pen_yz = QtGui.QPen(col_yz)
+                        pen_yz.setWidth(2)
+                        pen_yz.setCosmetic(True)
+                        syz = getattr(self.view_yz, "_sample_scale", 1)
+                        self._plot_marker_items_yz.append(
+                            self._add_circle(self.view_yz.scene(), z * syz, y * syz, half * syz, pen_yz)
+                        )
+                    # XZ view (y fixed): draw at (Z, X)
+                    dist_xz = abs(int(y) - int(self._cy))
+                    if dist_xz <= fade_dist:
+                        alpha = max(0.0, 1.0 - (dist_xz / float(fade_dist)))
+                        col_xz = QtGui.QColor(base_col)
+                        col_xz.setAlpha(int(alpha * 255))
+                        pen_xz = QtGui.QPen(col_xz)
+                        pen_xz.setWidth(2)
+                        pen_xz.setCosmetic(True)
+                        sxz = getattr(self.view_xz, "_sample_scale", 1)
+                        z_disp = (Z - 1 - int(z)) * sxz
+                        x_disp = (X - 1 - int(x)) * sxz
+                        self._plot_marker_items_xz.append(
+                            self._add_circle(self.view_xz.scene(), z_disp, x_disp, half * sxz, pen_xz)
+                        )
 
     @staticmethod
     def _add_cross(scene: QtWidgets.QGraphicsScene, x: int, y: int, half: int, pen: QtGui.QPen):
@@ -603,12 +773,47 @@ class SubboxingWidget(QtWidgets.QWidget):
         items.append(scene.addLine(x, y - half, x, y + half, pen))
         return items
 
+    @staticmethod
+    def _add_circle(scene: QtWidgets.QGraphicsScene, x: float, y: float, radius: float, pen: QtGui.QPen):
+        rect = QtCore.QRectF(x - radius, y - radius, 2 * radius, 2 * radius)
+        item = scene.addEllipse(rect, pen)
+        return item
+    
+    # Axis glyph is rendered in a separate widget next to each view.
+
     # ---- Keyboard handling ----
     def eventFilter(self, obj, event):
         if event.type() == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Backspace:
             self._delete_last_point()
             return True
+        if event.type() == QtCore.QEvent.Resize:
+            if obj in (self.view_xy, self.view_yz, self.view_xz):
+                QtCore.QTimer.singleShot(0, self._position_axis_overlays)
+        
         return super().eventFilter(obj, event)
+
+    def _position_axis_overlays(self):
+        try:
+            pairs = (
+                (self.view_yz, self._axis_overlay_yz),
+                (self.view_xz, self._axis_overlay_xz),
+                (self.view_xy, self._axis_overlay_xy),
+            )
+        except Exception:
+            return
+        for view, ow in pairs:
+            try:
+                if not ow or not view:
+                    continue
+                vp = view.viewport()
+                if ow.height() <= 0:
+                    ow.resize(ow.sizeHint())
+                x = 6
+                y = max(0, vp.height() - ow.height() - 6)
+                ow.move(int(x), int(y))
+                ow.raise_()
+            except Exception:
+                pass
 
     def _delete_last_point(self):
         if not self._asu_points:
@@ -643,6 +848,18 @@ class SubboxingWidget(QtWidgets.QWidget):
         else:
             self._current_asu = asu_idx
             self._current_idx = len(pts) - 1 if pts else None
+        self._refresh_all()
+        self._reset_plotted_points()
+
+    def _clear_interactive_points_on_param_change(self):
+        """Clear all user-added crosses and any plotted circles when ASU/segment inputs change."""
+        # Clear picked points (crosses)
+        self._asu_points.clear()
+        self._current_asu = None
+        self._current_idx = None
+        # Clear plotted circles as well to avoid mismatch with new parameters
+        self._reset_plotted_points()
+        # Redraw views without markers
         self._refresh_all()
 
     # ---- Handedness helpers ----
@@ -739,7 +956,7 @@ class SubboxingWidget(QtWidgets.QWidget):
                         pass
 
         if radii:
-            self.tube_diam.setValue(2.0 * float(np.mean(radii)) * pixA)
+            self.filament_diam.setValue(2.0 * float(np.mean(radii)) * pixA)
         if delta_angles:
             mean_twist = float(np.mean(delta_angles))
             # Apply handedness sign: R=positive, L=negative
@@ -748,3 +965,149 @@ class SubboxingWidget(QtWidgets.QWidget):
             self.twist.setValue(mean_twist)
         if rises:
             self.rise.setValue(float(np.mean(rises)))
+
+    # ---- Plotting generated coordinates ----
+    def _reset_plotted_points(self):
+        # Remove any existing plotted markers from scenes
+        for items in (
+            getattr(self, "_plot_marker_items_xy", []),
+            getattr(self, "_plot_marker_items_yz", []),
+            getattr(self, "_plot_marker_items_xz", []),
+        ):
+            for it in list(items):
+                try:
+                    it.scene().removeItem(it)
+                except Exception:
+                    pass
+            try:
+                items.clear()
+            except Exception:
+                pass
+        self._plotted_points = []
+        self._plot_marker_items_xy = []
+        self._plot_marker_items_yz = []
+        self._plot_marker_items_xz = []
+        # Update button label state
+        try:
+            self._update_plot_button_text()
+        except Exception:
+            pass
+
+    def _has_plotted_points(self) -> bool:
+        pts = getattr(self, "_plotted_points", None)
+        if not pts:
+            return False
+        return any(bool(p) for p in pts)
+
+    def _update_plot_button_text(self):
+        if not hasattr(self, "btn_plot_coords"):
+            return
+        if self._has_plotted_points():
+            self.btn_plot_coords.setText("Clear plotted coordinates")
+        else:
+            self.btn_plot_coords.setText("Plot calculated coordinates")
+
+    def _clear_plotted_coordinates(self):
+        self._reset_plotted_points()
+
+    def _toggle_plot_coordinates(self):
+        if self._has_plotted_points():
+            self._clear_plotted_coordinates()
+        else:
+            self._plot_coordinates()
+        # Ensure label reflects current state
+        try:
+            self._update_plot_button_text()
+        except Exception:
+            pass
+
+    def _symmetry_order(self) -> int:
+        try:
+            s = (self.symmetry.text() or "").strip().upper()
+        except Exception:
+            s = "C1"
+        m = re.match(r"^[CD]?(\d+)$", s) or re.match(r"^[CD](\d+)$", s)
+        if m:
+            try:
+                n = int(m.group(1))
+                return max(1, n)
+            except Exception:
+                return 1
+        # also handle like "C3" or "D7" with extra characters
+        m2 = re.search(r"(\d+)", s)
+        if m2:
+            try:
+                return max(1, int(m2.group(1)))
+            except Exception:
+                pass
+        return 1
+
+    def _plot_coordinates(self):
+        # Validate prerequisites
+        n_unique_req = int(self.n_unique.value())
+        if self._vol is None or n_unique_req <= 0:
+            return
+        if len(self._asu_points) < n_unique_req or any((not pts) for pts in self._asu_points[:n_unique_req]):
+            QtWidgets.QToolTip.showText(
+                QtGui.QCursor.pos(),
+                "Please add a starting point for each unique asymmetric unit",
+                self.btn_plot_coords,
+            )
+            return
+
+        # Compute generated points based on tube diameter, twist, rise, and symmetry
+        pixA = self._pixel_size_A()
+        if pixA <= 0:
+            pixA = 1.0
+        try:
+            filament_diam_A = float(self.filament_diam.value())
+        except Exception:
+            filament_diam_A = 0.0
+        try:
+            twist_deg = float(self.twist.value())
+        except Exception:
+            twist_deg = 0.0
+        try:
+            rise_A = float(self.rise.value())
+        except Exception:
+            rise_A = 0.0
+        # radius in pixels
+        r_pix = max(0.0, (filament_diam_A * 0.5) / pixA)
+        rise_pix = rise_A / pixA
+        Z, Y, X = self._vol.shape
+        xc = (X - 1) / 2.0
+        yc = (Y - 1) / 2.0
+        zc = (Z - 1) / 2.0
+
+        n_steps = int(max(1, int(self.n_per_segment.value())))
+        # Prepare container and generate per ASU
+        plotted = []
+        for asu_idx in range(min(len(self._asu_points), n_unique_req)):
+            seed_pts = self._asu_points[asu_idx]
+            if not seed_pts:
+                plotted.append([])
+                continue
+            # Use the first point as the starting reference
+            x0, y0, z0 = seed_pts[0]
+            # Angle in YZ plane (0 deg at +Z, CCW towards +Y)
+            theta0 = math.atan2(float(y0) - yc, float(z0) - zc)
+            pts = []
+            for k in range(n_steps):
+                theta = theta0 + math.radians(twist_deg) * k
+                x = float(x0) + rise_pix * k
+                z = float(zc) + r_pix * math.cos(theta)
+                y = float(yc) + r_pix * math.sin(theta)
+                # Clamp to volume bounds and store as ints
+                xi = int(np.clip(round(x), 0, X - 1))
+                yi = int(np.clip(round(y), 0, Y - 1))
+                zi = int(np.clip(round(z), 0, Z - 1))
+                pts.append((xi, yi, zi))
+            plotted.append(pts)
+
+        self._plotted_points = plotted
+        # Update label and redraw
+        try:
+            self._update_plot_button_text()
+        except Exception:
+            pass
+        self._refresh_all()

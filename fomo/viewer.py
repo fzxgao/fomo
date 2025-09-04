@@ -247,6 +247,7 @@ class TomoViewer(QtWidgets.QWidget):
         try:
             self.refinement_panel.subboxing.import_refined_requested.connect(self._import_refined)
             self.refinement_panel.subboxing.export_subboxed_requested.connect(self._export_relion)
+            self.refinement_panel.subboxing.calculate_subboxed_requested.connect(self._calculate_subboxed)
         except Exception:
             pass
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
@@ -477,6 +478,11 @@ class TomoViewer(QtWidgets.QWidget):
 
         # Load any saved models for this tomogram
         self._load_models_for_file(idx)
+        # Also load any precomputed subboxed models for this tomogram
+        try:
+            self._load_subboxed_models_for_file()
+        except Exception:
+            pass
 
         # Contrast from header/subsample
         if TomoViewer.last_contrast:
@@ -1094,6 +1100,32 @@ class TomoViewer(QtWidgets.QWidget):
                 self.add_model(rcsv, pts, vecs)
             except Exception:
                 continue
+
+    def _load_subboxed_models_for_file(self):
+        tomogram_path = Path(self.files[self.idx])
+        tomogram_name = tomogram_path.stem
+        root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not root_dir.exists():
+            return
+        target_dir = None
+        for d in root_dir.iterdir():
+            if d.is_dir() and d.name.endswith(tomogram_name):
+                target_dir = d
+                break
+        if target_dir is None:
+            return
+        for scsv in sorted(target_dir.glob("subboxed_xyz_*.csv")):
+            try:
+                arr = np.loadtxt(scsv, delimiter=",")
+                arr = np.atleast_2d(arr)
+                if arr.shape[1] < 9:
+                    continue
+                pts = arr[:, 3:6]
+                eulers = arr[:, 6:9]
+                vecs = np.array([euler_to_vectors(*ang) for ang in eulers])
+                self.add_model(scsv, pts, vecs)
+            except Exception:
+                continue
     def _check_ransac_present(self) -> bool:
         root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
         if not root_dir.exists():
@@ -1179,10 +1211,145 @@ class TomoViewer(QtWidgets.QWidget):
 
     def _export_relion(self):
         try:
-            export_relion(Path.cwd(), verbose=self._verbose)
+            # Read parameters from processing panel if available
+            output_angpix = 4.0
+            warpbox = 128
+            warp_diameter = 220
+            try:
+                panel = self.refinement_panel
+                if hasattr(panel, 'relion_output_angpix'):
+                    output_angpix = float(panel.relion_output_angpix.value())
+                if hasattr(panel, 'relion_warpbox'):
+                    warpbox = int(panel.relion_warpbox.value())
+                if hasattr(panel, 'relion_warp_diameter'):
+                    warp_diameter = int(panel.relion_warp_diameter.value())
+            except Exception:
+                pass
+
+            export_relion(
+                Path.cwd(),
+                output_angpix=output_angpix,
+                warpbox=warpbox,
+                warp_diameter=warp_diameter,
+                verbose=self._verbose,
+            )
         except Exception as e:
             if self._verbose:
                 print(f"[relion] export failed: {e}")
+
+    def _calculate_subboxed(self):
+        """Generate subboxed coordinates for every refined_xyz_*.csv in every tomogram.
+
+        For each refined point C1, compute C2 = C1 + (0, 0, -0.5 * pitch), where
+        pitch = rise_pix * n_per_segment. Then generate N points C3.. by rotating
+        a radius vector around Z in the XY plane by multiples of ``twist`` and
+        stepping up by ``rise_pix`` in Z each time. Store Euler angles so that
+        z-axis remains (0,0,1) and x-axis aligns with the in-plane radius vector.
+        """
+        try:
+            sb = self.refinement_panel.subboxing
+        except Exception:
+            return
+        # Parameters from UI
+        try:
+            pixA = float(sb._pixel_size_A())
+            if pixA <= 0:
+                pixA = 1.0
+        except Exception:
+            pixA = 1.0
+        try:
+            rise_A = float(sb.rise.value())
+        except Exception:
+            rise_A = 0.0
+        try:
+            twist_deg = float(sb.twist.value())
+        except Exception:
+            twist_deg = 0.0
+        try:
+            diam_A = float(sb.filament_diam.value())
+        except Exception:
+            diam_A = 0.0
+        try:
+            n_per_seg = int(sb.n_per_segment.value())
+        except Exception:
+            n_per_seg = 1
+
+        if n_per_seg <= 0:
+            n_per_seg = 1
+        r_pix = max(0.0, (diam_A * 0.5) / pixA)
+        rise_pix = rise_A / pixA
+        pitch_pix = rise_pix * float(n_per_seg)
+        twist_rad = math.radians(twist_deg)
+
+        tomo_root = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not tomo_root.exists():
+            return
+        # Iterate all tomograms and all refined csvs
+        tomo_dirs = [d for d in tomo_root.iterdir() if d.is_dir() and d.name.startswith("volume_")]
+        total_csv = 0
+        for tdir in tomo_dirs:
+            refined_csvs = sorted(tdir.glob("refined_xyz_*.csv"))
+            if not refined_csvs:
+                continue
+            for rcsv in refined_csvs:
+                # Determine filament id from filename
+                m = re.match(r"refined_xyz_(\d+)\.csv", rcsv.name)
+                filament_id = m.group(1) if m else None
+                try:
+                    arr = np.loadtxt(rcsv, delimiter=",", ndmin=2)
+                except Exception:
+                    continue
+                if arr.size == 0:
+                    continue
+                # choose refined coordinates if present, else original
+                if arr.shape[1] >= 6:
+                    base_pts = arr[:, 3:6]
+                else:
+                    base_pts = arr[:, 0:3]
+                out_rows = []
+                for c1 in base_pts:
+                    x1, y1, z1 = float(c1[0]), float(c1[1]), float(c1[2])
+                    # C2: move down in Z by half a pitch
+                    c2x = x1
+                    c2y = y1
+                    c2z = z1 - 0.5 * pitch_pix
+                    # Generate N subboxed points
+                    for i in range(n_per_seg):
+                        ang = twist_rad * float(i)
+                        dx = r_pix * math.cos(ang)
+                        dy = r_pix * math.sin(ang)
+                        x = c2x + dx
+                        y = c2y + dy
+                        z = c2z + i * rise_pix
+                        # Euler angles (Z-X-Z with tilt=0, narot=0, tdrot=phi)
+                        phi_deg = math.degrees(math.atan2(dy, dx))
+                        tdrot = phi_deg
+                        tilt = 0.0
+                        narot = 0.0
+                        # Write 9 columns: original XYZ, refined XYZ, Euler angles
+                        out_rows.append([x, y, z, x, y, z, tdrot, tilt, narot])
+                out_arr = np.array(out_rows, dtype=float)
+                out_name = f"subboxed_xyz_{filament_id}.csv" if filament_id else rcsv.name.replace("refined_", "subboxed_")
+                out_path = tdir / out_name
+                try:
+                    np.savetxt(out_path, out_arr, fmt="%.6f", delimiter=",")
+                except Exception:
+                    continue
+                total_csv += 1
+                # If this subboxed file belongs to the currently shown tomogram, add it
+                try:
+                    cur_tomo = Path(self.files[self.idx]).stem
+                    if tdir.name.endswith(cur_tomo):
+                        try:
+                            pts = out_arr[:, 3:6]
+                            eulers = out_arr[:, 6:9]
+                            vecs = np.array([euler_to_vectors(*ang) for ang in eulers])
+                            self.add_model(out_path, pts, vecs)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        self._set_status_message(f"Subboxed: wrote {total_csv} file(s)")
 
     def _load_latest_initial_average(self):
         catalogue = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / "average_reference"

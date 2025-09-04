@@ -230,7 +230,7 @@ class TomoViewer(QtWidgets.QWidget):
 
         # Side panel stack: refinement (default) and picking panel
         self.side_panel = QtWidgets.QStackedWidget()
-        self.refinement_panel = RefinementSidePanel()
+        self.refinement_panel = RefinementSidePanel(verbose=self._verbose)
         self.picking_panel = PickingSidePanel()
         self.side_panel.addWidget(self.refinement_panel)
         self.side_panel.addWidget(self.picking_panel)
@@ -243,6 +243,12 @@ class TomoViewer(QtWidgets.QWidget):
         self.refinement_panel.calc_initial_btn.clicked.connect(self._calculate_initial_average)
         self.picking_panel.import_btn.clicked.connect(self._import_refined)
         self.picking_panel.export_relion_btn.clicked.connect(self._export_relion)
+        # Subboxing actions
+        try:
+            self.refinement_panel.subboxing.import_refined_requested.connect(self._import_refined)
+            self.refinement_panel.subboxing.export_subboxed_requested.connect(self._export_relion)
+        except Exception:
+            pass
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         v.addWidget(self.splitter, 1)
 

@@ -27,7 +27,7 @@ from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
-from fomo.features.export_relion import export_relion
+from fomo.features.export_relion import export_relion, export_subboxed_relion
 from fomo.features.ransac_pipeline import run_ransac_pipeline
 
 # ---------------- Utility ----------------
@@ -246,7 +246,7 @@ class TomoViewer(QtWidgets.QWidget):
         # Subboxing actions
         try:
             self.refinement_panel.subboxing.import_refined_requested.connect(self._import_refined)
-            self.refinement_panel.subboxing.export_subboxed_requested.connect(self._export_relion)
+            self.refinement_panel.subboxing.export_subboxed_requested.connect(self._export_subboxed_relion)
             self.refinement_panel.subboxing.calculate_subboxed_requested.connect(self._calculate_subboxed)
         except Exception:
             pass
@@ -1236,6 +1236,34 @@ class TomoViewer(QtWidgets.QWidget):
         except Exception as e:
             if self._verbose:
                 print(f"[relion] export failed: {e}")
+
+    def _export_subboxed_relion(self):
+        try:
+            # Read parameters from subboxing panel
+            output_subboxed_angpix = 2.0
+            subboxed_warpbox = 78
+            warp_subboxed_diameter = 150
+            try:
+                sb = self.refinement_panel.subboxing
+                if hasattr(sb, 'output_subboxed_angpix'):
+                    output_subboxed_angpix = float(sb.output_subboxed_angpix.value())
+                if hasattr(sb, 'subboxed_warpbox'):
+                    subboxed_warpbox = int(sb.subboxed_warpbox.value())
+                if hasattr(sb, 'warp_subboxed_diameter'):
+                    warp_subboxed_diameter = int(sb.warp_subboxed_diameter.value())
+            except Exception:
+                pass
+
+            export_subboxed_relion(
+                Path.cwd(),
+                output_subboxed_angpix=output_subboxed_angpix,
+                subboxed_warpbox=subboxed_warpbox,
+                warp_subboxed_diameter=warp_subboxed_diameter,
+                verbose=self._verbose,
+            )
+        except Exception as e:
+            if self._verbose:
+                print(f"[relion] subboxed export failed: {e}")
 
     def _calculate_subboxed(self):
         """Generate subboxed coordinates for every refined_xyz_*.csv in every tomogram.

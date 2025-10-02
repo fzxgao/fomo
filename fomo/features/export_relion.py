@@ -1,6 +1,7 @@
 import re
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from typing import Iterable
@@ -186,3 +187,183 @@ def export_relion(
 
     if verbose:
        print("[relion] ran WarpTools ts_export_particles")
+
+
+def export_relion_subboxed_stars(root_dir: Path | str = Path.cwd(), *, verbose: bool = False) -> None:
+    """Generate ``*_subboxed.star`` files for all subboxed coordinates.
+
+    Looks for ``subboxed*.csv`` within each tomogram directory and writes a
+    corresponding STAR into ``warp_tiltseries/subboxed`` with normalized
+    coordinates and Euler angles.
+    """
+    root_dir = Path(root_dir)
+    settings_path = root_dir / "warp_tiltseries.settings"
+    raw_px, raw_dim_x, raw_dim_z = _parse_warp_settings(settings_path)
+
+    out_dir = root_dir / "warp_tiltseries" / "subboxed"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for tomo_dir in _iter_tomogram_dirs(root_dir):
+        name_part = "_".join(tomo_dir.name.split("_", 2)[2:])
+        m = re.search(r"([0-9.]+)Apx", name_part)
+        if not m:
+            if verbose:
+                print(f"[relion] could not determine pixel size for {tomo_dir.name}")
+            continue
+        tomo_px = float(m.group(1))
+        scale = tomo_px / raw_px
+        tomo_dim_xy = int(round(raw_dim_x / scale))
+        tomo_dim_z = int(round(raw_dim_z / scale))
+
+        csvs = sorted(tomo_dir.glob("subboxed*.csv"))
+        if not csvs:
+            if verbose:
+                print(f"[relion] no subboxed CSVs for {tomo_dir.name}")
+            continue
+
+        rows: list[str] = []
+        for csv in csvs:
+            try:
+                data = np.loadtxt(csv, delimiter=",", ndmin=2)
+            except Exception:
+                if verbose:
+                    print(f"[relion] failed to read {csv}")
+                continue
+            if data.size == 0:
+                continue
+            coords = data[:, 3:6]
+            eulers = data[:, 6:9]
+            # eulers = convert_eulers(eulers, source_meta="dynamo", target_meta="relion")
+            norm_x = coords[:, 0] / tomo_dim_xy
+            norm_y = coords[:, 1] / tomo_dim_xy
+            norm_z = coords[:, 2] / tomo_dim_z
+            for i in range(len(coords)):
+                rows.append(
+                    f" {norm_x[i]:.8f} {norm_y[i]:.8f} {norm_z[i]:.8f} "
+                    f"{eulers[i,0]:.6f} {eulers[i,1]:.6f} {eulers[i,2]:.6f}"
+                )
+        if not rows:
+            if verbose:
+                print(f"[relion] no subboxed coordinates found for {tomo_dir.name}")
+            continue
+        micrograph_base = re.sub(r"_[0-9.]+Apx$", "", name_part)
+        micrograph = f"{micrograph_base}.tomostar"
+        star_path = out_dir / f"{name_part}_subboxed.star"
+        with open(star_path, "w") as fh:
+            fh.write("data_\n\nloop_\n")
+            fh.write("\n".join([
+                "_rlnCoordinateX #1",
+                "_rlnCoordinateY #2",
+                "_rlnCoordinateZ #3",
+                "_rlnAngleRot #4",
+                "_rlnAngleTilt #5",
+                "_rlnAnglePsi #6",
+                "_rlnMicrographName #7",
+                "_rlnAutopickFigureOfMerit #8",
+            ]) + "\n")
+            for r in rows:
+                fh.write(f"{r} {micrograph} 10\n")
+        if verbose:
+            print(f"[relion] wrote {star_path} ({len(rows)} particles)")
+
+
+def export_subboxed_relion(
+    root_dir: Path | str = Path.cwd(),
+    *,
+    output_subboxed_angpix: float = 2.0,
+    subboxed_warpbox: int = 78,
+    warp_subboxed_diameter: int = 150,
+    verbose: bool = False,
+) -> None:
+    """Export subboxed particles to RELION using WarpTools.
+
+    Steps:
+      0. If both ``warp_tiltseries/particleseries`` and ``relion/matching.star``
+         exist, move particles to ``warp_tiltseries/particleseries_original``
+         (overwriting if present) and rewrite paths in ``relion/matching.star``
+         to point to the ``particleseries_original`` directory.
+      1. Write per-tomogram ``*_subboxed.star`` files under
+         ``warp_tiltseries/subboxed/`` using ``subboxed*.csv``.
+      2. Run ``WarpTools ts_export_particles`` with those STARs to produce
+         ``relion/matching_subboxed.star`` and particle stacks.
+    """
+
+    root = Path(root_dir)
+
+    # Step 0: Preserve existing particleseries and update matching.star paths
+    ps_dir = root / "warp_tiltseries" / "particleseries"
+    ps_orig = root / "warp_tiltseries" / "particleseries_original"
+    matching_star = root / "relion" / "matching.star"
+    if ps_dir.exists() and matching_star.exists():
+        try:
+            if ps_orig.exists():
+                shutil.rmtree(ps_orig)
+            shutil.move(str(ps_dir), str(ps_orig))
+        except Exception as e:
+            if verbose:
+                print(f"[relion] failed to move particleseries: {e}")
+        # Rewrite paths in matching.star
+        try:
+            txt = matching_star.read_text()
+            txt = txt.replace(
+                "warp_tiltseries/particleseries/",
+                "warp_tiltseries/particleseries_original/",
+            )
+            matching_star.write_text(txt)
+        except Exception as e:
+            if verbose:
+                print(f"[relion] failed to rewrite matching.star: {e}")
+
+    # Step 1: Create *_subboxed.star files from subboxed coordinates
+    export_relion_subboxed_stars(root, verbose=verbose)
+
+    # Step 2: Run WarpTools to export subboxed particles
+    # Find WarpTools executable as in export_relion
+    roots = ["micromamba", "mamba", "anaconda3", "miniconda3", ".local/share/micromamba"]
+    warp_executable = "WarpTools"
+    try:
+        for env_root in roots:
+            exe = Path.home() / env_root / "envs" / "warp" / "bin" / "WarpTools"
+            if exe.exists():
+                warp_executable = str(exe)
+                break
+    except FileNotFoundError:
+        print(
+            f"WarpTools not found in micromamba/mamba/conda/miniconda envs, assuming WarpTools is installed in the fomo environment. If not, please install Warp using your preferred python package and environment manager and try again."
+        )
+
+    # Ensure output directory exists
+    (root / "relion").mkdir(parents=True, exist_ok=True)
+    print(f"WarpTools executable: {warp_executable}")
+
+    cmd = [
+        warp_executable,
+        "ts_export_particles",
+        "--settings",
+        "warp_tiltseries.settings",
+        "--input_directory",
+        "warp_tiltseries/subboxed",
+        "--input_pattern",
+        "*_subboxed.star",
+        "--normalized_coords",
+        "--output_star",
+        "relion/matching_subboxed.star",
+        "--output_angpix",
+        str(output_subboxed_angpix),
+        "--box",
+        str(subboxed_warpbox),
+        "--diameter",
+        str(warp_subboxed_diameter),
+        "--relative_output_paths",
+        "--2d",
+    ]
+
+    child = pexpect.spawn(cmd[0], cmd[1:], cwd=str(root), encoding="utf-8")
+    child.logfile = sys.stdout
+    child.expect(pexpect.EOF, timeout=None)
+    rc = child.wait()
+    if rc:
+        raise subprocess.CalledProcessError(rc, " ".join(cmd))
+
+    if verbose:
+        print("[relion] ran WarpTools ts_export_particles (subboxed)")

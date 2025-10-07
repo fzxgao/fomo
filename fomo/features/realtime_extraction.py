@@ -16,7 +16,7 @@ def _write_em(volume: np.ndarray, path: Path) -> None:
     write_em(path, volume, overwrite=True)
 
 
-def extract_particles_on_exit(viewer, tomo_idx: int = None) -> None:
+def extract_particles_on_exit(viewer, tomo_idx: int = None, box_size: int = None) -> None:
     """Extract particle subvolumes when leaving picking mode.
 
     Parameters
@@ -25,10 +25,16 @@ def extract_particles_on_exit(viewer, tomo_idx: int = None) -> None:
         The main viewer instance that contains the loaded tomogram and
         picking panel parameters.
     """
-    panel = getattr(viewer, "picking_panel", None)
-    if panel is None:
-        return
-    box_size = int(getattr(panel.box_size, "value", lambda: 40)())
+    if box_size is None:
+        panel = getattr(viewer, "picking_panel", None)
+        if panel is None:
+            return
+        try:
+            box_size = int(getattr(panel.box_size, "value", lambda: 40)())
+        except Exception:
+            box_size = 40
+    else:
+        box_size = int(box_size)
 
     # Tomogram index to operate on
     idx = viewer.idx if tomo_idx is None else int(tomo_idx)

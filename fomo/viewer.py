@@ -26,6 +26,7 @@ from fomo.widgets.picking_panel import PickingSidePanel
 from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
+from fomo.features.merge_particles import merge_crop_tables_and_particles
 from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
 from fomo.features.export_relion import export_relion, export_subboxed_relion
 from fomo.features.ransac_pipeline import run_ransac_pipeline
@@ -175,6 +176,11 @@ class TomoViewer(QtWidgets.QWidget):
         # Picking mode handler
         self.picking_handler = PickingModeHandler(self)
 
+        # Track box size driven extraction state
+        self._box_size_reextracting = False
+        self._pending_box_size = None
+        self._last_box_size = None
+
         # Model overlays (smoothed filaments and refined points)
         self.models = []  # [{'name': str, 'points': np.ndarray, 'path': Path, 'vectors': np.ndarray | None}]
         self._model_items = []
@@ -232,6 +238,8 @@ class TomoViewer(QtWidgets.QWidget):
         self.side_panel = QtWidgets.QStackedWidget()
         self.refinement_panel = RefinementSidePanel(verbose=self._verbose)
         self.picking_panel = PickingSidePanel()
+        self._last_box_size = int(self.picking_panel.box_size.value())
+        self.picking_panel.box_size.valueChanged.connect(self._on_box_size_changed)
         self.side_panel.addWidget(self.refinement_panel)
         self.side_panel.addWidget(self.picking_panel)
         self.side_panel.setFixedWidth(330)
@@ -883,6 +891,129 @@ class TomoViewer(QtWidgets.QWidget):
         except Exception as e:
             if self._verbose:
                 print(f"[models] failed to update particles after deleting {name}: {e}")
+
+    def _on_box_size_changed(self, value):
+        new_size = int(round(value))
+        if new_size <= 0:
+            return
+        if self._last_box_size == new_size:
+            return
+        self._last_box_size = new_size
+        if self._box_size_reextracting:
+            self._pending_box_size = new_size
+            return
+        if not self.picking_handler.is_active():
+            return
+        self._pending_box_size = None
+        self._run_reextract_for_box_size(new_size)
+
+    def _clear_initial_average_artifacts(self):
+        avg_dir = Path.cwd() / "fomo_dynamo_catalogue" / "alignments" / "average_reference"
+        if avg_dir.exists():
+            try:
+                shutil.rmtree(avg_dir)
+            except Exception as exc:
+                if self._verbose:
+                    print(f"[box_size] failed to remove {avg_dir}: {exc}")
+        self._initial_avg = None
+        self._initial_avg_min = None
+        self._initial_avg_max = None
+        try:
+            for label in getattr(self.refinement_panel, "initial_avg_views", []):
+                label.clear()
+        except Exception:
+            pass
+        try:
+            for slider in getattr(self.refinement_panel, "initial_avg_sliders", []):
+                slider.blockSignals(True)
+                slider.setMinimum(0)
+                slider.setMaximum(0)
+                slider.setValue(0)
+                slider.blockSignals(False)
+        except Exception:
+            pass
+
+    def _clear_particle_stacks(self):
+        root = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not root.exists():
+            return
+        for particles_dir in root.glob("*/particles_*"):
+            if not particles_dir.is_dir():
+                continue
+            for em in particles_dir.glob("particle_*.em"):
+                try:
+                    em.unlink()
+                except Exception as exc:
+                    if self._verbose:
+                        print(f"[box_size] failed to delete {em}: {exc}")
+            for extra in ("crop.tbl", "crop.tbl.tmp"):
+                tbl = particles_dir / extra
+                try:
+                    tbl.unlink()
+                except FileNotFoundError:
+                    pass
+                except Exception as exc:
+                    if self._verbose:
+                        print(f"[box_size] failed to delete {tbl}: {exc}")
+
+    def _run_reextract_for_box_size(self, box_size: int):
+        self._box_size_reextracting = True
+        errors = []
+        try:
+            self._set_status_message(f"Re-extracting particles (box {box_size}) ...")
+            self._clear_initial_average_artifacts()
+            self._clear_particle_stacks()
+            total = len(self.files)
+            for idx in range(total):
+                self._set_status_message(
+                    f"Re-extracting particles (box {box_size}) {idx + 1}/{total}"
+                )
+                try:
+                    extract_particles_on_exit(self, idx, box_size=box_size)
+                except Exception as exc:
+                    errors.append((idx, exc))
+                    if self._verbose:
+                        print(f"[box_size] extraction failed for index {idx}: {exc}")
+            self._set_status_message("Merging particle stacks ...")
+            try:
+                subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "fomo.features.merge_particles_cli",
+                    ],
+                    cwd=str(Path.cwd()),
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                try:
+                    merge_crop_tables_and_particles(Path.cwd())
+                except Exception as exc:
+                    errors.append(("merge", exc))
+                    if self._verbose:
+                        print(f"[box_size] merge failed: {exc}")
+        finally:
+            self._box_size_reextracting = False
+            next_box = self._pending_box_size
+            self._pending_box_size = None
+            try:
+                self.picking_handler._volume_snapshot = (
+                    self.picking_handler._compute_volume_snapshot()
+                )
+            except Exception:
+                pass
+            try:
+                self._update_status()
+            except Exception:
+                pass
+            if errors:
+                print(f"[box_size] re-extraction completed with {len(errors)} issue(s)")
+            if next_box is not None and next_box != box_size:
+                QtCore.QTimer.singleShot(
+                    0, lambda nb=next_box: self._run_reextract_for_box_size(nb)
+                )
 
     def _update_model_overlays(self):
         scene = self.view_xy.scene()

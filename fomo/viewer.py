@@ -10,6 +10,7 @@ import re
 from datetime import datetime
 import shutil
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 import numpy as np
 import mrcfile
@@ -27,7 +28,12 @@ from fomo.widgets.refinement_panel import RefinementSidePanel
 from fomo.features.picking import PickingModeHandler, FADE_DIST
 from fomo.features.realtime_extraction import extract_particles_on_exit
 from fomo.features.merge_particles import merge_crop_tables_and_particles
-from fomo.features.refined_import import import_refined_coordinates, euler_to_vectors
+from fomo.features.refined_import import (
+    import_refined_coordinates,
+    euler_to_vectors,
+    find_latest_refined_table,
+    generate_refined_csvs,
+)
 from fomo.features.export_relion import export_relion, export_subboxed_relion
 from fomo.features.ransac_pipeline import run_ransac_pipeline
 
@@ -119,6 +125,7 @@ class TomoViewer(QtWidgets.QWidget):
         self.prev_tomo_path = os.path.join(self.root_dir, "previous_tomo")
         self._particle_count = 0
         self._particle_mtime = None
+        self._ensure_manual_filament_xyz()
         if os.path.isdir(path):
             self.idx = 0
             if os.path.exists(self.prev_tomo_path):
@@ -211,8 +218,40 @@ class TomoViewer(QtWidgets.QWidget):
         self.top_split.installEventFilter(self)
         self.load_file(self.idx)
         self._load_latest_refined_average()
+        self._ensure_refined_csvs()
         self._ransac_loaded = self._check_ransac_present()
         self._update_ransac_button()
+
+    def _ensure_manual_filament_xyz(self):
+        """Ensure raw_*.tbl files have matching xyz_*.csv traces on startup."""
+        root_dir = Path.cwd() / "fomo_dynamo_catalogue" / "tomograms"
+        if not root_dir.exists():
+            return
+        for tomo_dir in sorted(root_dir.iterdir()):
+            if not tomo_dir.is_dir():
+                continue
+            for raw_path in sorted(tomo_dir.glob("raw_*.tbl")):
+                xyz_path = raw_path.with_name(
+                    raw_path.name.replace("raw_", "xyz_").replace(".tbl", ".csv")
+                )
+                if xyz_path.exists():
+                    continue
+                try:
+                    pts = np.loadtxt(raw_path, usecols=(23, 24, 25))
+                except Exception as exc:
+                    if self._verbose:
+                        print(f"[startup] failed reading {raw_path}: {exc}")
+                    continue
+                pts = np.atleast_2d(pts)
+                if pts.size == 0 or pts.shape[1] < 3:
+                    continue
+                try:
+                    np.savetxt(xyz_path, pts[:, :3], fmt="%.6f", delimiter=",")
+                    if self._verbose:
+                        print(f"[startup] regenerated {xyz_path}")
+                except Exception as exc:
+                    if self._verbose:
+                        print(f"[startup] failed writing {xyz_path}: {exc}")
 
     # ---------- Verbose window resize ----------
     def resizeEvent(self, event):
@@ -1232,6 +1271,68 @@ class TomoViewer(QtWidgets.QWidget):
             except Exception:
                 continue
 
+
+    def _ensure_refined_csvs(self):
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue"
+        tomograms_dir = catalogue / "tomograms"
+        alignments_dir = catalogue / "alignments"
+        if not tomograms_dir.exists() or not alignments_dir.exists():
+            return
+        try:
+            path_to_tomograms, refined_tbl, prefix = find_latest_refined_table(
+                catalogue, use_ransac=False
+            )
+        except FileNotFoundError:
+            return
+
+        existing = next(
+            path_to_tomograms.rglob(f"{prefix}_xyz_*.csv"),
+            None,
+        )
+        if existing is not None:
+            if self._refined_tbl_path is None:
+                self._refined_tbl_path = refined_tbl
+            return
+        try:
+            generate_refined_csvs(
+                path_to_tomograms,
+                refined_tbl,
+                prefix,
+                verbose=self._verbose,
+            )
+            self._refined_tbl_path = refined_tbl
+        except Exception as exc:
+            if self._verbose:
+                print(f"[refined] auto generation failed: {exc}")
+
+    def _regenerate_refined_csvs(self, alignment_folder: Optional[str] = None):
+        catalogue = Path.cwd() / "fomo_dynamo_catalogue"
+        alignments_dir = catalogue / "alignments"
+        if not alignments_dir.exists():
+            return
+        alignment_override = None
+        if alignment_folder:
+            alignment_override = alignments_dir / alignment_folder
+        try:
+            path_to_tomograms, refined_tbl, prefix = find_latest_refined_table(
+                catalogue,
+                use_ransac=False,
+                alignment_override=alignment_override,
+            )
+        except FileNotFoundError:
+            return
+        try:
+            generate_refined_csvs(
+                path_to_tomograms,
+                refined_tbl,
+                prefix,
+                verbose=self._verbose,
+            )
+            self._refined_tbl_path = refined_tbl
+        except Exception as exc:
+            if self._verbose:
+                print(f"[refined] csv refresh failed: {exc}")
+
     def _load_subboxed_models_for_file(self):
         tomogram_path = Path(self.files[self.idx])
         tomogram_name = tomogram_path.stem
@@ -2120,6 +2221,7 @@ class TomoViewer(QtWidgets.QWidget):
             label.setPixmap(pix)
 
     def _finish_refinement(self):
+        folder = self._refine_folder
         if self._refine_timer is not None:
             self._refine_timer.stop()
             self._refine_timer = None
@@ -2129,7 +2231,8 @@ class TomoViewer(QtWidgets.QWidget):
         self._refine_folder = None
         self._last_refine_iter = -1
         self._defer_refine_display = False
-
+        self._regenerate_refined_csvs(folder)
+        
     # ---------- XY marker drawing ----------
     def clear_marker_xy(self):
         scene = self.view_xy.scene()

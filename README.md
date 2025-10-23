@@ -22,6 +22,7 @@ Fomo depends on WarpTools and Dynamo.
 Clone the repository and install the required dependencies:
 ```bash
 pip install -r requirements.txt
+```
 
 ## Acknowledgements
 FOMO builds on the ideas, software, and community effort of several outstanding projects. We’re grateful for their tools, that made this work possible:
